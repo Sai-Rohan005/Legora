@@ -1,4 +1,4 @@
-from parser import Clause, RomanClause, SubClause
+from models.legal_models import Clause, RomanClause, SubClause
 from models.legal_models import (
 LegalDocument,
 Division,
