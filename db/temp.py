@@ -133,15 +133,157 @@
 
 
 
-from neo4j import GraphDatabase
+# from neo4j import GraphDatabase
 
-driver = GraphDatabase.driver(
-    "bolt://localhost:7687",
-    auth=("neo4j", "test12345")
-)
+# driver = GraphDatabase.driver(
+#     "bolt://localhost:7687",
+#     auth=("neo4j", "test12345")
+# )
 
-with driver.session() as session:
-    result = session.run("RETURN 1")
-    print(result.single())
+# with driver.session() as session:
+#     query = """
+#     MATCH (a:Article {number: 14})
+#     RETURN a.text AS content
+#     """
 
-driver.close()
+#     result = session.run(query)
+#     print(result.single())
+
+# driver.close()
+# from embeddings_generator import LegalEmbedder
+# from vector_db import QdrantIngestor
+
+# question = "what does article 14 of the indian constitution say?"
+
+# # Create embedding
+
+# embedder = LegalEmbedder(model_name="all-MiniLM-L6-v2")
+# embedding = embedder.embed_texts(question)
+
+# # Search Qdrant
+
+# qdrant = QdrantIngestor()
+# hits = qdrant.search(
+#     # collection_name="legal_constitution",
+#     query_vector=embedding.tolist()[0],
+#     limit=5
+# )
+
+# # article_ids = [hit.payload["article_id"] for hit in hits]
+# print("Top matching article IDs:", hits)
+
+# # # Fetch from Neo4j
+# # query = """
+# # MATCH (a:Article)
+# # WHERE a.article_id IN $ids
+# # RETURN a.article_id, a.text
+# # """
+
+# # result = session.run(query, ids=article_ids)
+
+# # for row in result:
+#     # print(row["a.text"])
+
+
+
+# from parser import ConstitutionParser
+# from record_generator import ConstitutionRecordGenerator
+
+# with open("text_extracted_ocr_output.txt", "r", encoding="utf8") as f:
+#         text = f.read()
+
+# parser = ConstitutionParser()
+# parts = parser.parse(text)
+
+# generator = ConstitutionRecordGenerator()
+
+# records = generator.generate(parts)
+
+# print("Total Records:", len(records))
+
+# print(records[0])
+
+from retrieval import LegalRetriever
+from vector_db import QdrantIngestor
+
+
+def pretty_print(results):
+
+    print("\n")
+    print("=" * 100)
+
+    for idx, result in enumerate(results):
+
+        payload = result["payload"]
+
+        print(
+            f"\nResult #{idx+1}"
+        )
+
+        print(
+            f"Score: {result['score']:.4f}"
+        )
+
+        print(
+            f"Part: {payload.get('part_no')}"
+        )
+
+        print(
+            f"Article: {payload.get('article_no')}"
+        )
+
+        print(
+            f"Clause: {payload.get('clause_no')}"
+        )
+
+        print(
+            f"Sub Clause: {payload.get('sub_clause_no')}"
+        )
+
+        print(
+            f"Type: {payload.get('chunk_type')}"
+        )
+
+        print("\nText:\n")
+
+        print(
+            payload.get(
+                "embedding_text",
+                ""
+            )[:1000]
+        )
+
+        print("\n")
+        print("-" * 100)
+
+
+def main():
+
+    qdrant = QdrantIngestor(
+        collection_name="legal_constitution",
+        vector_size=1024
+    )
+
+    retriever = LegalRetriever(
+        qdrant_db=qdrant
+    )
+
+    while True:
+
+        query = input(
+            "\nAsk Constitution Question: "
+        )
+
+        if query.lower() == "exit":
+            break
+
+        results = retriever.retrieve(
+            query=query,
+            top_k=5
+        )
+
+        pretty_print(results)
+
+
+if __name__ == "__main__":
+    main()

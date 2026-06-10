@@ -8,7 +8,7 @@ class QdrantIngestor:
     def __init__(
         self,
         collection_name: str = "legal_constitution",
-        vector_size: int = 384
+        vector_size: int = 1024
     ):
 
         self.client = QdrantClient(host="localhost", port=6333)
@@ -30,50 +30,66 @@ class QdrantIngestor:
                 )
             )
 
-    # -----------------------------
-    # STABLE ID GENERATOR
-    # -----------------------------
-    def _make_id(self, chunk: dict) -> str:
-
-        raw = (
-        str(chunk.part_no or "") +
-        str(chunk.article_no or "") +
-        str(chunk.clause_no or "") +
-        str(hash(chunk.text))
-    )
-
-        return hashlib.md5(raw.encode()).hexdigest()
+  
 
     # -----------------------------
     # UPSERT (IDEMPOTENT)
     # -----------------------------
-    def upsert_chunks(self, chunks, embeddings):
+    def upsert_chunks(self, records, embeddings):
 
         points = []
 
-        for chunk, vector in zip(chunks, embeddings):
-
-            point_id = self._make_id(chunk)
+        for record, vector in zip(records, embeddings):
 
             points.append(
                 PointStruct(
-                    id=point_id,
+                    id=record["id"],
+
                     vector=vector.tolist(),
-                    payload = {
-                        "text": chunk.text,
-                        "part": chunk.part_no,
-                        "part_title": chunk.part_title,
-                        "article": chunk.article_no,
-                        "article_title": chunk.article_title,
-                        "clause": chunk.clause_no,
-                        "sub_clause": chunk.sub_clause_no,
+
+                    payload={
+                        **record["metadata"],
+
+                        "chunk_type":
+                            record["chunk_type"],
+
+                        "embedding_text":
+                            record["embedding_text"]
                     }
                 )
             )
 
-        self.client.upsert(
-            collection_name=self.collection_name,
-            points=points
+        BATCH_SIZE = 100
+
+        for i in range(0, len(points), BATCH_SIZE):
+
+            batch = points[i:i+BATCH_SIZE]
+
+            self.client.upsert(
+                collection_name=self.collection_name,
+                points=batch
+            )
+
+            print(
+                f"Uploaded {min(i+BATCH_SIZE, len(points))}/{len(points)}"
+            )
+
+        print(
+            f"Inserted/Updated {len(points)} records into Qdrant"
         )
 
-        print(f"Inserted/Updated {len(points)} chunks into Qdrant")
+    def search(
+        self,
+        query_vector,
+        limit=5
+    ):
+
+        results = self.client.query_points(
+            collection_name=self.collection_name,
+            query=query_vector.tolist(),
+            limit=limit,
+            with_payload=True,
+            with_vectors=False
+        )
+
+        return results.points
