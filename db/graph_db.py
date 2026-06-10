@@ -3,213 +3,131 @@ from neo4j import GraphDatabase
 
 class LegalGraphDB:
 
-    def __init__(self, uri, user, password):
+    def __init__(self, uri: str, user: str, password: str):
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
 
     def close(self):
         self.driver.close()
 
-    # -----------------------------
-    # INSERT STRUCTURE (IDEMPOTENT)
-    # -----------------------------
+    # --------------------------------------------------
+    # INSERT CHUNKS (CLEAN + SAFE)
+    # --------------------------------------------------
 
-    def insert_structure(self, parts):
+    def insert_chunks(self, records):
 
         with self.driver.session() as session:
 
-            for part in parts:
+            for record in records:
 
-                part_id = f"PART-{part.part_no}"
+                metadata = record.get("metadata", {}) or {}
 
-                session.run("""
-                    MERGE (p:Part {id:$id})
-                    SET p.number=$number,
-                        p.title=$title
-                """,
-                id=part_id,
-                number=part.part_no,
-                title=part.part_title)
+                embedding = record.get("embedding")
 
-                for article in part.articles:
+                if hasattr(embedding, "tolist"):
+                    embedding = embedding.tolist()
 
-                    article_id = (
-                        f"{part_id}-ARTICLE-{article.article_no}"
-                    )
+                # -----------------------------
+                # CORE NODE PROPERTIES
+                # -----------------------------
+                props = {
+                    "id": record["id"],
+                    "document_type": record["document_type"],
+                    "chunk_type": record["chunk_type"],
+                    "text": record["embedding_text"],
+                }
 
-                    session.run("""
-                        MERGE (a:Article {id:$id})
-                        SET a.number=$number,
-                            a.title=$title,
-                            a.text=$text
+                # -----------------------------
+                # ADD METADATA (FLAT ONLY)
+                # -----------------------------
+                props.update(metadata)
 
-                        WITH a
+                # -----------------------------
+                # ADD EMBEDDING (OPTIONAL)
+                # -----------------------------
+                if embedding is not None:
+                    props["embedding"] = embedding
 
-                        MATCH (p:Part {id:$part_id})
-
-                        MERGE (p)-[:HAS_ARTICLE]->(a)
+                # -----------------------------
+                # CREATE NODE
+                # -----------------------------
+                session.run(
+                    """
+                    MERGE (n:LegalChunk {id: $id})
+                    SET n += $props
                     """,
-                    id=article_id,
-                    number=article.article_no,
-                    title=article.article_title,
-                    text=article.text,
-                    part_id=part_id)
+                    id=record["id"],
+                    props=props
+                )
 
-                    # ----------------------------------
-                    # REFERENCES
-                    # ----------------------------------
+    # --------------------------------------------------
+    # VECTOR INDEX
+    # --------------------------------------------------
 
-                    for ref in article.references:
+    def create_vector_index(
+        self,
+        dimensions: int = 1024,
+        index_name: str = "legal_embeddings"
+    ):
 
-                        ref_id = f"ARTICLE-{ref.article_no}"
+        with self.driver.session() as session:
 
-                        session.run("""
-                            MERGE (r:ArticleRef {id:$id})
+            session.run(f"""
+                CREATE VECTOR INDEX {index_name} IF NOT EXISTS
+                FOR (n:LegalChunk)
+                ON (n.embedding)
+                OPTIONS {{
+                    indexConfig: {{
+                        `vector.dimensions`: {dimensions},
+                        `vector.similarity_function`: 'cosine'
+                    }}
+                }}
+            """)
 
-                            SET r.number=$number
+    # --------------------------------------------------
+    # VECTOR SEARCH
+    # --------------------------------------------------
 
-                            WITH r
+    def vector_search(self, embedding, top_k: int = 10, index_name="legal_embeddings"):
 
-                            MATCH (a:Article {id:$article_id})
+        if hasattr(embedding, "tolist"):
+            embedding = embedding.tolist()
 
-                            MERGE (a)-[:REFERENCES]->(r)
-                        """,
-                        id=ref_id,
-                        number=ref.article_no,
-                        article_id=article_id)
+        with self.driver.session() as session:
 
-                    # ----------------------------------
-                    # PROVISOS
-                    # ----------------------------------
+            result = session.run(
+                """
+                CALL db.index.vector.queryNodes(
+                    $index_name,
+                    $top_k,
+                    $embedding
+                )
+                YIELD node, score
 
-                    for idx, proviso in enumerate(
-                        article.provisos
-                    ):
+                RETURN
+                    node.id AS id,
+                    node.chunk_type AS chunk_type,
+                    node.document_type AS document_type,
+                    node.text AS text,
+                    score
+                ORDER BY score DESC
+                """,
+                index_name=index_name,
+                top_k=top_k,
+                embedding=embedding
+            )
 
-                        proviso_id = (
-                            f"{article_id}-PROVISO-{idx}"
-                        )
+            return [dict(r) for r in result]
 
-                        session.run("""
-                            MERGE (p:Proviso {id:$id})
+    # --------------------------------------------------
+    # UTILITIES
+    # --------------------------------------------------
 
-                            SET p.text=$text
+    def count_chunks(self):
+        with self.driver.session() as session:
+            return session.run(
+                "MATCH (n:LegalChunk) RETURN count(n) AS total"
+            ).single()["total"]
 
-                            WITH p
-
-                            MATCH (a:Article {id:$article_id})
-
-                            MERGE (a)-[:HAS_PROVISO]->(p)
-                        """,
-                        id=proviso_id,
-                        text=proviso.text,
-                        article_id=article_id)
-
-                    # ----------------------------------
-                    # EXPLANATIONS
-                    # ----------------------------------
-
-                    for idx, explanation in enumerate(
-                        article.explanations
-                    ):
-
-                        explanation_id = (
-                            f"{article_id}-EXPLANATION-{idx}"
-                        )
-
-                        session.run("""
-                            MERGE (e:Explanation {id:$id})
-
-                            SET e.text=$text
-
-                            WITH e
-
-                            MATCH (a:Article {id:$article_id})
-
-                            MERGE (a)-[:HAS_EXPLANATION]->(e)
-                        """,
-                        id=explanation_id,
-                        text=explanation.text,
-                        article_id=article_id)
-
-                    # ----------------------------------
-                    # CLAUSES
-                    # ----------------------------------
-
-                    for clause in article.clauses:
-
-                        clause_id = (
-                            f"{article_id}-CLAUSE-{clause.clause_no}"
-                        )
-
-                        session.run("""
-                            MERGE (c:Clause {id:$id})
-
-                            SET c.number=$number,
-                                c.text=$text
-
-                            WITH c
-
-                            MATCH (a:Article {id:$article_id})
-
-                            MERGE (a)-[:HAS_CLAUSE]->(c)
-                        """,
-                        id=clause_id,
-                        number=clause.clause_no,
-                        text=clause.text,
-                        article_id=article_id)
-
-                        # ------------------------------
-                        # SUBCLAUSES
-                        # ------------------------------
-
-                        for sub in clause.sub_clauses:
-
-                            sub_id = (
-                                f"{clause_id}-SUB-{sub.sub_clause_no}"
-                            )
-
-                            session.run("""
-                                MERGE (s:SubClause {id:$id})
-
-                                SET s.number=$number,
-                                    s.text=$text
-
-                                WITH s
-
-                                MATCH (c:Clause {id:$clause_id})
-
-                                MERGE (c)-[:HAS_SUBCLAUSE]->(s)
-                            """,
-                            id=sub_id,
-                            number=sub.sub_clause_no,
-                            text=sub.text,
-                            clause_id=clause_id)
-
-                            # --------------------------
-                            # ROMAN CLAUSES
-                            # --------------------------
-
-                            for roman in sub.roman_clauses:
-
-                                roman_id = (
-                                    f"{sub_id}-ROMAN-{roman.roman_no}"
-                                )
-
-                                session.run("""
-                                    MERGE (r:RomanClause {id:$id})
-
-                                    SET r.number=$number,
-                                        r.text=$text
-
-                                    WITH r
-
-                                    MATCH (s:SubClause {
-                                        id:$sub_id
-                                    })
-
-                                    MERGE (s)-[:HAS_ROMAN]->(r)
-                                """,
-                                id=roman_id,
-                                number=roman.roman_no,
-                                text=roman.text,
-                                sub_id=sub_id)
+    def clear(self):
+        with self.driver.session() as session:
+            session.run("MATCH (n:LegalChunk) DETACH DELETE n")
