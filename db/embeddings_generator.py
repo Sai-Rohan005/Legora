@@ -7,7 +7,7 @@ class LegalEmbedder:
     Converts legal chunks into embeddings using SentenceTransformer
     """
 
-    def __init__(self, model_name: str = "all-mpnet-base-v2"):
+    def __init__(self, model_name: str = "BAAI/bge-large-en-v1.5"):
         self.model = SentenceTransformer(model_name)
 
     def embed_texts(self, texts: List[str]):

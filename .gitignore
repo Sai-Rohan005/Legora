@@ -12,6 +12,7 @@ yarn-error.log*
 # Dependency directories
 node_modules/
 vendor/
+pdfs/
 
 # Environment variables
 .env
