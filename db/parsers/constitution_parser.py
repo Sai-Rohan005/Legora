@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field, asdict
 from typing import List
-
+from models.legal_models import Article, Part, Explanation, Proviso, RomanClause, SubClause, Clause
 
 # ==========================================================
 # DATA MODELS
@@ -14,53 +14,53 @@ class Reference:
     article_no: str
 
 
-@dataclass
-class Explanation:
-    text: str
+# @dataclass
+# class Explanation:
+#     text: str
 
 
-@dataclass
-class Proviso:
-    text: str
+# @dataclass
+# class Proviso:
+#     text: str
 
 
-@dataclass
-class RomanClause:
-    roman_no: str
-    text: str
+# @dataclass
+# class RomanClause:
+#     roman_no: str
+#     text: str
 
 
-@dataclass
-class SubClause:
-    sub_clause_no: str
-    text: str
-    roman_clauses: List[RomanClause] = field(default_factory=list)
+# @dataclass
+# class SubClause:
+#     sub_clause_no: str
+#     text: str
+#     roman_clauses: List[RomanClause] = field(default_factory=list)
 
 
-@dataclass
-class Clause:
-    clause_no: str
-    text: str
-    sub_clauses: List[SubClause] = field(default_factory=list)
+# @dataclass
+# class Clause:
+#     clause_no: str
+#     text: str
+#     sub_clauses: List[SubClause] = field(default_factory=list)
 
 
-@dataclass
-class Article:
-    article_no: str
-    article_title: str
-    text: str
+# @dataclass
+# class Article:
+#     article_no: str
+#     article_title: str
+#     text: str
 
-    clauses: List[Clause] = field(default_factory=list)
-    provisos: List[Proviso] = field(default_factory=list)
-    explanations: List[Explanation] = field(default_factory=list)
-    references: List[Reference] = field(default_factory=list)
+#     clauses: List[Clause] = field(default_factory=list)
+#     provisos: List[Proviso] = field(default_factory=list)
+#     explanations: List[Explanation] = field(default_factory=list)
+#     references: List[Reference] = field(default_factory=list)
 
 
-@dataclass
-class Part:
-    part_no: str
-    part_title: str
-    articles: List[Article] = field(default_factory=list)
+# @dataclass
+# class Part:
+#     part_no: str
+#     part_title: str
+#     articles: List[Article] = field(default_factory=list)
 
 
 # ==========================================================
@@ -344,6 +344,7 @@ class ConstitutionParser:
         for p in self.extract_parts(raw_text):
 
             part = Part(
+                document="constitution",
                 part_no=p["part_no"],
                 part_title=p["part_title"]
             )
@@ -351,6 +352,7 @@ class ConstitutionParser:
             for a in self.extract_articles(p["text"]):
 
                 article = Article(
+                    document="constitution",
                     article_no=a["article_no"],
                     article_title=a["article_title"],
                     text=a["text"]
@@ -371,6 +373,7 @@ class ConstitutionParser:
                 for c in self.extract_clauses(article.text):
 
                     clause = Clause(
+                        document="constitution",
                         clause_no=c["clause_no"],
                         text=c["text"]
                     )
@@ -380,6 +383,7 @@ class ConstitutionParser:
                     ):
 
                         sub = SubClause(
+                            document="constitution",
                             sub_clause_no=s["sub_clause_no"],
                             text=s["text"]
                         )
@@ -390,6 +394,7 @@ class ConstitutionParser:
 
                             sub.roman_clauses.append(
                                 RomanClause(
+                                    document="constitution",
                                     roman_no=r["roman_no"],
                                     text=r["text"]
                                 )

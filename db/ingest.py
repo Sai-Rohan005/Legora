@@ -80,69 +80,69 @@ for doc in [
 ]:
     all_chunks.extend(normalise_document(doc))
 
+print("normaliser generated",all_chunks[:2])
+# # --------------------------------------------------
+# # ⭐ GLOBAL ID FIX (CRITICAL)
+# # --------------------------------------------------
 
-# --------------------------------------------------
-# ⭐ GLOBAL ID FIX (CRITICAL)
-# --------------------------------------------------
+# for chunk in all_chunks:
+#     chunk_id = f"{chunk['type']}|" \
+#                f"{chunk.get('meta', {}).get('division_no','')}-" \
+#                f"{chunk.get('meta', {}).get('provision_no','')}-" \
+#                f"{chunk.get('meta', {}).get('clause_no','')}-" \
+#                f"{hash(chunk['text'])}"
 
-for chunk in all_chunks:
-    chunk_id = f"{chunk['type']}|" \
-               f"{chunk.get('meta', {}).get('division_no','')}-" \
-               f"{chunk.get('meta', {}).get('provision_no','')}-" \
-               f"{chunk.get('meta', {}).get('clause_no','')}-" \
-               f"{hash(chunk['text'])}"
-
-    chunk["id"] = str(chunk_id)
-
-
-# --------------------------------------------------
-# GRAPH DB (NEO4J)
-# --------------------------------------------------
-
-graph = LegalGraphDB(
-    uri="bolt://localhost:7687",
-    user="neo4j",
-    password="test12345"
-)
-
-graph.insert_chunks(all_chunks)
-print("✅ Data inserted into Neo4j")
+#     chunk["id"] = str(chunk_id)
 
 
-# --------------------------------------------------
-# RECORD GENERATION (FOR VECTOR DB)
-# --------------------------------------------------
+# # --------------------------------------------------
+# # GRAPH DB (NEO4J)
+# # --------------------------------------------------
 
-record_generator = LegalRecordGenerator()
+# graph = LegalGraphDB(
+#     uri="bolt://localhost:7687",
+#     user="neo4j",
+#     password="test12345"
+# )
 
-records = record_generator.generate(
-    normalized_chunks=all_chunks,
-    document_type="legal"
-)
-
-
-# --------------------------------------------------
-# EMBEDDINGS
-# --------------------------------------------------
-
-embedder = LegalEmbedder(model_name="BAAI/bge-large-en-v1.5")
-
-records = embedder.embed_records(records)
+# graph.insert_chunks(all_chunks)
+# print("✅ Data inserted into Neo4j")
 
 
-# --------------------------------------------------
-# VECTOR DB (QDRANT)
-# --------------------------------------------------
+# # --------------------------------------------------
+# # RECORD GENERATION (FOR VECTOR DB)
+# # --------------------------------------------------
 
-qdrant = QdrantIngestor()
+# record_generator = LegalRecordGenerator()
 
-qdrant.upsert_chunks(records)
+# records = record_generator.generate(
+#     normalized_chunks=all_chunks,
+#     document_type="legal"
+# )
 
-print("✅ Data inserted into Qdrant")
+
+# # --------------------------------------------------
+# # EMBEDDINGS
+# # --------------------------------------------------
+
+# embedder = LegalEmbedder(model_name="BAAI/bge-large-en-v1.5")
+
+# records = embedder.embed_records(records)
 
 
-# --------------------------------------------------
-# CLEANUP
-# --------------------------------------------------
+# # --------------------------------------------------
+# # VECTOR DB (QDRANT)
+# # --------------------------------------------------
 
-graph.close()
+# qdrant = QdrantIngestor()
+
+# qdrant.upsert_chunks(records)
+
+# print("✅ Data inserted into Qdrant")
+
+
+# # --------------------------------------------------
+# # CLEANUP
+# # --------------------------------------------------
+
+# graph.close()

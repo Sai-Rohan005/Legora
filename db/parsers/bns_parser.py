@@ -124,6 +124,7 @@ class BNSParser(BaseLegalParser):
         for chapter_data in chapter_blocks:
 
             chapter = Chapter(
+                document="bns",
                 chapter_no=
                     chapter_data[
                         "chapter_no"
@@ -144,6 +145,7 @@ class BNSParser(BaseLegalParser):
             for section_data in section_blocks:
 
                 section = Section(
+                    document="bns",
 
                     section_no=
                         section_data[
@@ -174,6 +176,7 @@ class BNSParser(BaseLegalParser):
                 for clause_data in clause_blocks:
 
                     clause = Clause(
+                        document="bns",
                         clause_no=
                             clause_data[
                                 "clause_no"
@@ -225,6 +228,7 @@ class BNSParser(BaseLegalParser):
 
                             sub_clause.roman_clauses.append(
                                 RomanClause(
+                                    document="bns",
                                     roman_no=
                                         roman_data[
                                             "roman_no"
@@ -254,6 +258,7 @@ class BNSParser(BaseLegalParser):
             )
 
         return LegalDocument(
+            document="bns",
             document_type="bns",
             divisions=parsed_chapters
         )

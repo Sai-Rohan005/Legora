@@ -300,6 +300,7 @@ class BSAParser(BaseLegalParser):
             ):
 
                 division = Division(
+                    document="bsa",
                     division_no=chapter_data["chapter_no"],
                     title=chapter_data["chapter_title"]
                 )
@@ -309,6 +310,7 @@ class BSAParser(BaseLegalParser):
                 ):
 
                     provision = Provision(
+                        document="bsa",
                         provision_no=section_data["section_no"],
                         title=section_data["section_title"],
                         text=section_data["text"]
@@ -323,6 +325,7 @@ class BSAParser(BaseLegalParser):
                     ):
 
                         clause = Clause(
+                            document="bsa",
                             clause_no=clause_data["clause_no"],
                             text=clause_data["text"]
                         )
@@ -336,6 +339,7 @@ class BSAParser(BaseLegalParser):
                         ):
 
                             sub = SubClause(
+                                document="bsa",
                                 sub_clause_no=sub_data["sub_clause_no"],
                                 text=sub_data["text"]
                             )
@@ -350,6 +354,7 @@ class BSAParser(BaseLegalParser):
 
                                 sub.roman_clauses.append(
                                     RomanClause(
+                                        document="bsa",
                                         roman_no=roman_data["roman_no"],
                                         text=roman_data["text"]
                                     )
@@ -376,6 +381,7 @@ class BSAParser(BaseLegalParser):
                 )
 
         return LegalDocument(
+            document="bsa",
             document_type="bsa",
             divisions=divisions
         )
