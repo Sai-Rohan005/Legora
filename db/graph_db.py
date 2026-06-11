@@ -10,124 +10,239 @@ class LegalGraphDB:
         self.driver.close()
 
     # --------------------------------------------------
-    # INSERT CHUNKS (CLEAN + SAFE)
+    # INSERT CHUNKS
     # --------------------------------------------------
 
-    def insert_chunks(self, records):
+    def insert_chunks(self, chunks):
 
         with self.driver.session() as session:
 
-            for record in records:
+            for chunk in chunks:
 
-                metadata = record.get("metadata", {}) or {}
+                chunk_type = chunk["type"]
+                text = chunk["text"]
 
-                embedding = record.get("embedding")
+                meta = chunk.get("meta", {}) or {}
 
+                document = meta.get("document")
+
+                embedding = chunk.get("embedding")
                 if hasattr(embedding, "tolist"):
                     embedding = embedding.tolist()
 
-                # -----------------------------
-                # CORE NODE PROPERTIES
-                # -----------------------------
-                props = {
-                    "id": record["id"],
-                    "document_type": record["document_type"],
-                    "chunk_type": record["chunk_type"],
-                    "text": record["embedding_text"],
-                }
+                # ==================================================
+                # DIVISION
+                # ==================================================
 
-                # -----------------------------
-                # ADD METADATA (FLAT ONLY)
-                # -----------------------------
-                props.update(metadata)
+                if chunk_type == "division":
 
-                # -----------------------------
-                # ADD EMBEDDING (OPTIONAL)
-                # -----------------------------
-                if embedding is not None:
-                    props["embedding"] = embedding
+                    props = {
+                        "document": document,
+                        "chunk_type": "division",
+                        "division_no": meta["division_no"],
+                        "text": text,
+                    }
 
-                # -----------------------------
-                # CREATE NODE
-                # -----------------------------
-                session.run(
-                    """
-                    MERGE (n:LegalChunk {id: $id})
-                    SET n += $props
-                    """,
-                    id=record["id"],
-                    props=props
-                )
+                    if embedding is not None:
+                        props["embedding"] = embedding
 
-    # --------------------------------------------------
-    # VECTOR INDEX
-    # --------------------------------------------------
+                    session.run(
+                        """
+                        MERGE (d:LegalChunk:Division {
+                            document:$document,
+                            division_no:$division_no
+                        })
 
-    def create_vector_index(
-        self,
-        dimensions: int = 1024,
-        index_name: str = "legal_embeddings"
-    ):
+                        SET d += $props
+                        """,
+                        document=document,
+                        division_no=meta["division_no"],
+                        props=props
+                    )
 
-        with self.driver.session() as session:
+                # ==================================================
+                # PROVISION
+                # ==================================================
 
-            session.run(f"""
-                CREATE VECTOR INDEX {index_name} IF NOT EXISTS
-                FOR (n:LegalChunk)
-                ON (n.embedding)
-                OPTIONS {{
-                    indexConfig: {{
-                        `vector.dimensions`: {dimensions},
-                        `vector.similarity_function`: 'cosine'
-                    }}
-                }}
-            """)
+                elif chunk_type == "provision":
 
-    # --------------------------------------------------
-    # VECTOR SEARCH
-    # --------------------------------------------------
+                    props = {
+                        "document": document,
+                        "chunk_type": "provision",
+                        "division_no": meta.get("division_no"),
+                        "provision_no": meta["provision_no"],
+                        "title": meta.get("title"),
+                        "text": text,
+                    }
 
-    def vector_search(self, embedding, top_k: int = 10, index_name="legal_embeddings"):
+                    if embedding is not None:
+                        props["embedding"] = embedding
 
-        if hasattr(embedding, "tolist"):
-            embedding = embedding.tolist()
+                    session.run(
+                        """
+                        MERGE (p:LegalChunk:Provision {
+                            document:$document,
+                            provision_no:$provision_no
+                        })
 
-        with self.driver.session() as session:
+                        SET p += $props
 
-            result = session.run(
-                """
-                CALL db.index.vector.queryNodes(
-                    $index_name,
-                    $top_k,
-                    $embedding
-                )
-                YIELD node, score
+                        WITH p
 
-                RETURN
-                    node.id AS id,
-                    node.chunk_type AS chunk_type,
-                    node.document_type AS document_type,
-                    node.text AS text,
-                    score
-                ORDER BY score DESC
-                """,
-                index_name=index_name,
-                top_k=top_k,
-                embedding=embedding
-            )
+                        OPTIONAL MATCH (d:Division {
+                            document:$document,
+                            division_no:$division_no
+                        })
 
-            return [dict(r) for r in result]
+                        FOREACH (_ IN CASE WHEN d IS NULL THEN [] ELSE [1] END |
+                            MERGE (d)-[:HAS_PROVISION]->(p)
+                        )
+                        """,
+                        document=document,
+                        provision_no=meta["provision_no"],
+                        division_no=meta.get("division_no"),
+                        props=props
+                    )
 
-    # --------------------------------------------------
-    # UTILITIES
-    # --------------------------------------------------
+                # ==================================================
+                # CLAUSE
+                # ==================================================
 
-    def count_chunks(self):
-        with self.driver.session() as session:
-            return session.run(
-                "MATCH (n:LegalChunk) RETURN count(n) AS total"
-            ).single()["total"]
+                elif chunk_type == "clause":
 
-    def clear(self):
-        with self.driver.session() as session:
-            session.run("MATCH (n:LegalChunk) DETACH DELETE n")
+                    props = {
+                        "document": document,
+                        "chunk_type": "clause",
+                        "provision_no": meta["provision_no"],
+                        "clause_no": meta["clause_no"],
+                        "text": text,
+                    }
+
+                    if embedding is not None:
+                        props["embedding"] = embedding
+
+                    session.run(
+                        """
+                        MERGE (c:LegalChunk:Clause {
+                            document:$document,
+                            provision_no:$provision_no,
+                            clause_no:$clause_no
+                        })
+
+                        SET c += $props
+
+                        WITH c
+
+                        MATCH (p:Provision {
+                            document:$document,
+                            provision_no:$provision_no
+                        })
+
+                        MERGE (p)-[:HAS_CLAUSE]->(c)
+                        """,
+                        document=document,
+                        provision_no=meta["provision_no"],
+                        clause_no=meta["clause_no"],
+                        props=props
+                    )
+
+                # ==================================================
+                # SUBCLAUSE
+                # ==================================================
+
+                elif chunk_type == "subclause":
+
+                    props = {
+                        "document": document,
+                        "chunk_type": "subclause",
+                        "provision_no": meta["provision_no"],
+                        "clause_no": meta["clause_no"],
+                        "subclause_no": meta["sub_clause_no"],
+                        "text": text,
+                    }
+
+                    if embedding is not None:
+                        props["embedding"] = embedding
+
+                    session.run(
+                        """
+                        MERGE (s:LegalChunk:Subclause {
+                            document:$document,
+                            provision_no:$provision_no,
+                            clause_no:$clause_no,
+                            subclause_no:$subclause_no
+                        })
+
+                        SET s += $props
+
+                        WITH s
+
+                        MATCH (c:Clause {
+                            document:$document,
+                            provision_no:$provision_no,
+                            clause_no:$clause_no
+                        })
+
+                        MERGE (c)-[:HAS_SUBCLAUSE]->(s)
+                        """,
+                        document=document,
+                        provision_no=meta["provision_no"],
+                        clause_no=meta["clause_no"],
+                        subclause_no=meta["sub_clause_no"],
+                        props=props
+                    )
+
+                # ==================================================
+                # ROMAN
+                # ==================================================
+
+                elif chunk_type == "roman":
+
+                    props = {
+                        "document": document,
+                        "chunk_type": "roman",
+                        "provision_no": meta["provision_no"],
+                        "clause_no": meta["clause_no"],
+                        "subclause_no": meta["sub_clause_no"],
+                        "roman_no": meta["roman_no"],
+                        "text": text,
+                    }
+
+                    if embedding is not None:
+                        props["embedding"] = embedding
+
+                    session.run(
+                        """
+                        MERGE (r:LegalChunk:Roman {
+                            document:$document,
+                            provision_no:$provision_no,
+                            clause_no:$clause_no,
+                            subclause_no:$subclause_no,
+                            roman_no:$roman_no
+                        })
+
+                        SET r += $props
+
+                        WITH r
+
+                        MATCH (s:Subclause {
+                            document:$document,
+                            provision_no:$provision_no,
+                            clause_no:$clause_no,
+                            subclause_no:$subclause_no
+                        })
+
+                        MERGE (s)-[:HAS_ROMAN]->(r)
+                        """,
+                        document=document,
+                        provision_no=meta["provision_no"],
+                        clause_no=meta["clause_no"],
+                        subclause_no=meta["sub_clause_no"],
+                        roman_no=meta["roman_no"],
+                        props=props
+                    )
+
+                else:
+                    raise ValueError(
+                        f"Unsupported chunk type: {chunk_type}"
+                    )

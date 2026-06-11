@@ -12,6 +12,7 @@ from parsers.base_parser import (
     
 )
 from models.legal_models import (
+    BaseNode,
     Chapter,
     Section,
     Clause,
@@ -26,7 +27,7 @@ from models.legal_models import (
 # ---------------------------------------------------
 
 @dataclass
-class Section:
+class Section(BaseNode):
     section_no: str
     section_title: str
     text: str
@@ -35,7 +36,7 @@ class Section:
 
 
 @dataclass
-class Chapter:
+class Chapter(BaseNode):
     chapter_no: str
     chapter_title: str
 
@@ -134,6 +135,7 @@ class BNSSParser(BaseLegalParser):
         for chapter_data in self.extract_chapters(raw_text):
 
             chapter = Chapter(
+                document="bnss",
                 chapter_no=chapter_data["chapter_no"],
                 chapter_title=chapter_data["chapter_title"]
             )
@@ -143,6 +145,7 @@ class BNSSParser(BaseLegalParser):
             ):
 
                 section = Section(
+                    document="bnss",
                     section_no=section_data["section_no"],
                     section_title=section_data["section_title"],
                     text=section_data["text"]
@@ -176,6 +179,7 @@ class BNSSParser(BaseLegalParser):
                     for s in sub_clause_data:
 
                         sub_clause = SubClause(
+                            document="bnss",
                             sub_clause_no=s["sub_clause_no"],
                             text=s["text"]
                         )
@@ -194,6 +198,7 @@ class BNSSParser(BaseLegalParser):
 
                             sub_clause.roman_clauses.append(
                                 RomanClause(
+                                    document="bnss",
                                     roman_no=r["roman_no"],
                                     text=r["text"]
                                 )
