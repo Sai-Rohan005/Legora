@@ -9,9 +9,8 @@ class LegalGraphDB:
     def close(self):
         self.driver.close()
 
-    # --------------------------------------------------
-    # INSERT CHUNKS
-    # --------------------------------------------------
+    def clean(self, d):
+        return {k: v for k, v in d.items() if v is not None}
 
     def insert_chunks(self, chunks):
 
@@ -19,230 +18,239 @@ class LegalGraphDB:
 
             for chunk in chunks:
 
-                chunk_type = chunk["type"]
-                text = chunk["text"]
-
+                chunk_type = chunk.get("type")
+                text = chunk.get("text", "")
                 meta = chunk.get("meta", {}) or {}
-
-                document = meta.get("document")
 
                 embedding = chunk.get("embedding")
                 if hasattr(embedding, "tolist"):
                     embedding = embedding.tolist()
 
+                document = meta.get("document")
+                if not document:
+                    print(f"Skipping chunk (missing document): {text[:40]}")
+                    continue
+
                 # ==================================================
                 # DIVISION
                 # ==================================================
-
                 if chunk_type == "division":
 
-                    props = {
+                    division_no = meta.get("division_no")
+                    if not division_no:
+                        continue
+
+                    props = self.clean({
                         "document": document,
                         "chunk_type": "division",
-                        "division_no": meta["division_no"],
+                        "division_no": division_no,
                         "text": text,
-                    }
-
-                    if embedding is not None:
-                        props["embedding"] = embedding
+                        "embedding": embedding
+                    })
 
                     session.run(
                         """
                         MERGE (d:LegalChunk:Division {
-                            document:$document,
-                            division_no:$division_no
+                            document: $document,
+                            division_no: $division_no
                         })
-
                         SET d += $props
                         """,
                         document=document,
-                        division_no=meta["division_no"],
+                        division_no=division_no,
                         props=props
                     )
 
                 # ==================================================
                 # PROVISION
                 # ==================================================
-
                 elif chunk_type == "provision":
 
-                    props = {
+                    provision_no = meta.get("provision_no")
+                    division_no = meta.get("division_no")
+
+                    if not provision_no:
+                        continue
+
+                    props = self.clean({
                         "document": document,
                         "chunk_type": "provision",
-                        "division_no": meta.get("division_no"),
-                        "provision_no": meta["provision_no"],
+                        "division_no": division_no,
+                        "provision_no": provision_no,
                         "title": meta.get("title"),
                         "text": text,
-                    }
-
-                    if embedding is not None:
-                        props["embedding"] = embedding
+                        "embedding": embedding
+                    })
 
                     session.run(
                         """
                         MERGE (p:LegalChunk:Provision {
-                            document:$document,
-                            provision_no:$provision_no
+                            document: $document,
+                            provision_no: $provision_no
                         })
-
                         SET p += $props
 
                         WITH p
-
-                        OPTIONAL MATCH (d:Division {
-                            document:$document,
-                            division_no:$division_no
+                        OPTIONAL MATCH (d:LegalChunk:Division {
+                            document: $document,
+                            division_no: $division_no
                         })
-
                         FOREACH (_ IN CASE WHEN d IS NULL THEN [] ELSE [1] END |
                             MERGE (d)-[:HAS_PROVISION]->(p)
                         )
                         """,
                         document=document,
-                        provision_no=meta["provision_no"],
-                        division_no=meta.get("division_no"),
+                        provision_no=provision_no,
+                        division_no=division_no,
                         props=props
                     )
 
                 # ==================================================
                 # CLAUSE
                 # ==================================================
-
                 elif chunk_type == "clause":
 
-                    props = {
+                    provision_no = meta.get("provision_no")
+                    clause_no = meta.get("clause_no")
+
+                    if not (provision_no and clause_no):
+                        continue
+
+                    props = self.clean({
                         "document": document,
                         "chunk_type": "clause",
-                        "provision_no": meta["provision_no"],
-                        "clause_no": meta["clause_no"],
+                        "provision_no": provision_no,
+                        "clause_no": clause_no,
                         "text": text,
-                    }
-
-                    if embedding is not None:
-                        props["embedding"] = embedding
+                        "embedding": embedding
+                    })
 
                     session.run(
                         """
                         MERGE (c:LegalChunk:Clause {
-                            document:$document,
-                            provision_no:$provision_no,
-                            clause_no:$clause_no
+                            document: $document,
+                            provision_no: $provision_no,
+                            clause_no: $clause_no
                         })
-
                         SET c += $props
 
                         WITH c
-
-                        MATCH (p:Provision {
-                            document:$document,
-                            provision_no:$provision_no
+                        OPTIONAL MATCH (p:LegalChunk:Provision {
+                            document: $document,
+                            provision_no: $provision_no
                         })
-
-                        MERGE (p)-[:HAS_CLAUSE]->(c)
+                        FOREACH (_ IN CASE WHEN p IS NULL THEN [] ELSE [1] END |
+                            MERGE (p)-[:HAS_CLAUSE]->(c)
+                        )
                         """,
                         document=document,
-                        provision_no=meta["provision_no"],
-                        clause_no=meta["clause_no"],
+                        provision_no=provision_no,
+                        clause_no=clause_no,
                         props=props
                     )
 
                 # ==================================================
-                # SUBCLAUSE
+                # SUBCLAUSE (FIXED)
                 # ==================================================
-
                 elif chunk_type == "subclause":
 
-                    props = {
+                    provision_no = meta.get("provision_no")
+                    clause_no = meta.get("clause_no")
+                    sub_clause_no = meta.get("sub_clause_no")
+
+                    if not (provision_no and clause_no and sub_clause_no):
+                        continue
+
+                    props = self.clean({
                         "document": document,
                         "chunk_type": "subclause",
-                        "provision_no": meta["provision_no"],
-                        "clause_no": meta["clause_no"],
-                        "subclause_no": meta["sub_clause_no"],
+                        "provision_no": provision_no,
+                        "clause_no": clause_no,
+                        "sub_clause_no": sub_clause_no,
                         "text": text,
-                    }
-
-                    if embedding is not None:
-                        props["embedding"] = embedding
+                        "embedding": embedding
+                    })
 
                     session.run(
                         """
                         MERGE (s:LegalChunk:Subclause {
-                            document:$document,
-                            provision_no:$provision_no,
-                            clause_no:$clause_no,
-                            subclause_no:$subclause_no
+                            document: $document,
+                            provision_no: $provision_no,
+                            clause_no: $clause_no,
+                            sub_clause_no: $sub_clause_no
                         })
-
                         SET s += $props
 
                         WITH s
-
-                        MATCH (c:Clause {
-                            document:$document,
-                            provision_no:$provision_no,
-                            clause_no:$clause_no
+                        OPTIONAL MATCH (c:LegalChunk:Clause {
+                            document: $document,
+                            provision_no: $provision_no,
+                            clause_no: $clause_no
                         })
-
-                        MERGE (c)-[:HAS_SUBCLAUSE]->(s)
+                        FOREACH (_ IN CASE WHEN c IS NULL THEN [] ELSE [1] END |
+                            MERGE (c)-[:HAS_SUBCLAUSE]->(s)
+                        )
                         """,
                         document=document,
-                        provision_no=meta["provision_no"],
-                        clause_no=meta["clause_no"],
-                        subclause_no=meta["sub_clause_no"],
+                        provision_no=provision_no,
+                        clause_no=clause_no,
+                        sub_clause_no=sub_clause_no,
                         props=props
                     )
 
                 # ==================================================
-                # ROMAN
+                # ROMAN (FIXED)
                 # ==================================================
-
                 elif chunk_type == "roman":
 
-                    props = {
+                    provision_no = meta.get("provision_no")
+                    clause_no = meta.get("clause_no")
+                    sub_clause_no = meta.get("sub_clause_no")
+                    roman_no = meta.get("roman_no")
+
+                    if not (provision_no and clause_no and sub_clause_no and roman_no):
+                        continue
+
+                    props = self.clean({
                         "document": document,
                         "chunk_type": "roman",
-                        "provision_no": meta["provision_no"],
-                        "clause_no": meta["clause_no"],
-                        "subclause_no": meta["sub_clause_no"],
-                        "roman_no": meta["roman_no"],
+                        "provision_no": provision_no,
+                        "clause_no": clause_no,
+                        "sub_clause_no": sub_clause_no,
+                        "roman_no": roman_no,
                         "text": text,
-                    }
-
-                    if embedding is not None:
-                        props["embedding"] = embedding
+                        "embedding": embedding
+                    })
 
                     session.run(
                         """
                         MERGE (r:LegalChunk:Roman {
-                            document:$document,
-                            provision_no:$provision_no,
-                            clause_no:$clause_no,
-                            subclause_no:$subclause_no,
-                            roman_no:$roman_no
+                            document: $document,
+                            provision_no: $provision_no,
+                            clause_no: $clause_no,
+                            sub_clause_no: $sub_clause_no,
+                            roman_no: $roman_no
                         })
-
                         SET r += $props
 
                         WITH r
-
-                        MATCH (s:Subclause {
-                            document:$document,
-                            provision_no:$provision_no,
-                            clause_no:$clause_no,
-                            subclause_no:$subclause_no
+                        OPTIONAL MATCH (s:LegalChunk:Subclause {
+                            document: $document,
+                            provision_no: $provision_no,
+                            clause_no: $clause_no,
+                            sub_clause_no: $sub_clause_no
                         })
-
-                        MERGE (s)-[:HAS_ROMAN]->(r)
+                        FOREACH (_ IN CASE WHEN s IS NULL THEN [] ELSE [1] END |
+                            MERGE (s)-[:HAS_ROMAN]->(r)
+                        )
                         """,
                         document=document,
-                        provision_no=meta["provision_no"],
-                        clause_no=meta["clause_no"],
-                        subclause_no=meta["sub_clause_no"],
-                        roman_no=meta["roman_no"],
+                        provision_no=provision_no,
+                        clause_no=clause_no,
+                        sub_clause_no=sub_clause_no,
+                        roman_no=roman_no,
                         props=props
                     )
 
                 else:
-                    raise ValueError(
-                        f"Unsupported chunk type: {chunk_type}"
-                    )
+                    print(f"Unknown chunk type: {chunk_type}")

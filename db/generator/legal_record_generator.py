@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import hashlib
 from typing import List, Dict, Any
 
 
@@ -9,13 +10,35 @@ class LegalRecordGenerator:
     def __init__(self):
         pass
 
-    def _id(self):
-        return str(uuid.uuid4())
+    # ---------------------------------------------------
+    # STABLE CHUNK ID (CORE FIX)
+    # ---------------------------------------------------
+    def _id(self, chunk: dict) -> str:
+
+        # If already assigned externally, trust it
+        if chunk.get("id"):
+            return chunk["id"]
+
+        meta = chunk.get("meta", {})
+
+        document_uuid = chunk.get("document_uuid")
+
+        # If document UUID exists → deterministic per document
+        if document_uuid:
+            base = f"{document_uuid}|{chunk.get('type')}|{chunk.get('text')}"
+
+            return str(uuid.uuid5(
+                uuid.UUID(document_uuid),
+                base
+            ))
+
+        # fallback (still deterministic but weaker)
+        raw = f"{chunk.get('type')}|{meta}|{chunk.get('text')}"
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
     # ---------------------------------------------------
     # MAIN ENTRY
     # ---------------------------------------------------
-
     def generate(
         self,
         normalized_chunks: List[dict],
@@ -38,13 +61,11 @@ class LegalRecordGenerator:
             )
 
             records.append({
-                "id": self._id(),
+                # 🔥 SAME ID USED FOR NEO4J + QDRANT
+                "id": self._id(chunk),
 
-                # keep ONE source of truth
                 "document_type": document_type,
-
                 "chunk_type": chunk_type,
-
                 "embedding_text": embedding_text,
 
                 "metadata": self._build_metadata(
@@ -57,9 +78,8 @@ class LegalRecordGenerator:
         return records
 
     # ---------------------------------------------------
-    # SMART EMBEDDING BUILDER (IMPROVED)
+    # EMBEDDING BUILDER
     # ---------------------------------------------------
-
     def _build_embedding_text(
         self,
         document_type: str,
@@ -68,16 +88,8 @@ class LegalRecordGenerator:
         meta: dict
     ) -> str:
 
-        lines = []
+        lines = [f"Document: {document_type}"]
 
-        # -----------------------------
-        # DOCUMENT CONTEXT
-        # -----------------------------
-        lines.append(f"Document: {document_type}")
-
-        # -----------------------------
-        # HIERARCHY CONTEXT (ORDERED)
-        # -----------------------------
         hierarchy_keys = [
             ("part_no", "Part"),
             ("division_no", "Division"),
@@ -90,17 +102,10 @@ class LegalRecordGenerator:
         ]
 
         for key, label in hierarchy_keys:
-            if key in meta and meta[key]:
+            if meta.get(key):
                 lines.append(f"{label}: {meta[key]}")
 
-        # -----------------------------
-        # CHUNK TYPE
-        # -----------------------------
         lines.append(f"Chunk Type: {chunk_type}")
-
-        # -----------------------------
-        # CONTENT
-        # -----------------------------
         lines.append("")
         lines.append("Content:")
         lines.append(text.strip())
@@ -108,9 +113,8 @@ class LegalRecordGenerator:
         return "\n".join(lines).strip()
 
     # ---------------------------------------------------
-    # CLEAN METADATA BUILDER
+    # METADATA CLEANING
     # ---------------------------------------------------
-
     def _build_metadata(
         self,
         document_type: str,
@@ -118,9 +122,6 @@ class LegalRecordGenerator:
         meta: dict
     ) -> Dict[str, Any]:
 
-        clean_meta = {}
-
-        # copy only meaningful fields
         allowed_keys = {
             "part_no",
             "division_no",
@@ -133,11 +134,12 @@ class LegalRecordGenerator:
             "title"
         }
 
-        for k in allowed_keys:
-            if k in meta:
-                clean_meta[k] = meta[k]
+        clean_meta = {
+            k: meta[k]
+            for k in allowed_keys
+            if k in meta
+        }
 
-        # system fields
         clean_meta["document_type"] = document_type
         clean_meta["chunk_type"] = chunk_type
 
