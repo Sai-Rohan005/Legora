@@ -100,3 +100,6 @@ pnpm-lock.yaml
 *.tar
 *.gz
 *.rar
+
+*.pkl
+*.npy
