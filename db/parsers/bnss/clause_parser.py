@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import List
 
-from cleaner import BNSTextCleaner
+from cleaner import BNSSTextCleaner
 from legal_models import (
     Clause,
     SubClause,
@@ -447,7 +447,7 @@ class ClauseParser:
 
     def validate_clauses(
         self,
-        
+        section_no,
         clauses: List[Clause]
     ) -> List[str]:
 
@@ -480,15 +480,18 @@ class ClauseParser:
 
             for sub in clause.sub_clauses:
 
-                if sub.sub_clause_no in sub_seen:
+                # if sub.sub_clause_no in sub_seen:
 
 
 
 
-                    errors.append(
-                        f"Duplicate SubClause "
-                        f"{sub.sub_clause_no}"
-                    )
+                #     errors.append(
+                #         f"Duplicate SubClause "
+                #         f"{sub.sub_clause_no}"
+                #     )
+
+
+
 
                 sub_seen.add(
                     sub.sub_clause_no
@@ -526,7 +529,7 @@ if __name__ == "__main__":
 
         text = f.read()
 
-    cleaner=BNSTextCleaner()
+    cleaner=BNSSTextCleaner()
     text=cleaner.clean(text)
 
  

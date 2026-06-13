@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import List
 
-from cleaner import BNSTextCleaner
+from cleaner import BNSSTextCleaner
 from legal_models import (
     Clause,
     SubClause,
@@ -38,17 +38,28 @@ class ClauseParser:
     # =====================================================
     # REGEX
     # =====================================================
-    
-    CLAUSE_RE = re.compile(
-        r"(?m)^(?:\s*)\((\d+[A-Za-z]?)\)"
+    NUMERIC_RE = re.compile(
+        r'(?m)^\((\d+[A-Z]?)\)'
     )
 
-    SUBCLAUSE_RE = re.compile(
-        r"(?m)^\s*\(([a-z])\)"
+    ALPHA_RE = re.compile(
+        r'(?m)^\(([a-z])\)'
+    )
+
+    CAPITAL_RE = re.compile(
+        r'(?m)^\(([A-Z])\)'
     )
 
     ROMAN_RE = re.compile(
-        r"(?m)^\s*\(([ivxlcdm]+)\)"
+        r'(?:(?<=\n)|(?<=;)|(?<=:)|(?<=—)|(?<=\.)|^)\s*\((i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx)\)',
+        re.I
+    )
+    CLAUSE_RE = re.compile(
+        r'(?m)^\s*\((\d+[A-Z]?)\)'
+    )
+
+    SUBCLAUSE_RE = re.compile(
+        r'(?m)^\s*\(([a-z])\)'
     )
 
     # =====================================================
@@ -129,12 +140,24 @@ class ClauseParser:
     "xi", "xii", "xiii", "xiv", "xv",
     "xvi", "xvii", "xviii", "xix", "xx"
     }
+    @staticmethod
+    def remove_illustrations(
+        self,
+        text: str
+    ):
+
+        return re.split(
+            r'Illustrations?\.',
+            text,
+            maxsplit=1,
+            flags=re.I
+        )[0]
 
     def parse_subclauses(
         self,
         text: str
     ) -> List[SubClause]:
-
+        text=self.remove_illustrations(text)
         subclauses = []
 
         sub_sections = (
@@ -170,6 +193,173 @@ class ClauseParser:
             )
 
         return subclauses
+    
+
+    def build_alpha_structure(
+        self,
+        text: str,
+        pattern: re.Pattern
+    ) -> List[Clause]:
+
+        clause = Clause(
+            document="bns",
+            clause_no="0",
+            text=text
+        )
+
+        sections = self.split_sections(
+            text,
+            pattern
+        )
+
+        for sub_no, sub_text in sections:
+
+            sub = SubClause(
+                document="bns",
+                sub_clause_no=sub_no,
+                text=sub_text
+            )
+
+            sub.roman_clauses.extend(
+                self.parse_roman_clauses(
+                    sub_text
+                )
+            )
+
+            clause.sub_clauses.append(
+                sub
+            )
+
+        return [clause]
+    
+    def build_numeric_structure(
+        self,
+        text: str
+    ) -> List[Clause]:
+
+        clauses = []
+
+        clause_sections = self.split_sections(
+            text,
+            self.NUMERIC_RE
+        )
+
+        for clause_no, clause_text in clause_sections:
+
+            clause = Clause(
+                document="bns",
+                clause_no=clause_no,
+                text=clause_text
+            )
+
+            alpha_sections = self.split_sections(
+                clause_text,
+                self.ALPHA_RE
+            )
+
+            if alpha_sections:
+
+                for sub_no, sub_text in alpha_sections:
+
+                    sub = SubClause(
+                        document="bns",
+                        sub_clause_no=sub_no,
+                        text=sub_text
+                    )
+
+                    sub.roman_clauses.extend(
+                        self.parse_roman_clauses(
+                            sub_text
+                        )
+                    )
+
+                    clause.sub_clauses.append(
+                        sub
+                    )
+
+            clauses.append(
+                clause
+            )
+
+        return clauses
+    def parse_alpha_clauses(
+        self,
+        text: str
+    ):
+
+        return self.build_alpha_structure(
+            text,
+            self.ALPHA_RE
+        )
+    
+
+    def parse_alpha_roman(
+        self,
+        text: str
+    ):
+
+        return self.build_alpha_structure(
+            text,
+            self.ALPHA_RE
+        )
+    
+
+    def parse_capital_roman(
+        self,
+        text: str
+    ):
+
+        return self.build_alpha_structure(
+            text,
+            self.CAPITAL_RE
+        )
+
+
+    def parse_numeric_clauses(
+        self,
+        text: str
+    ):
+
+        clauses = []
+
+        sections = self.split_sections(
+            text,
+            self.NUMERIC_RE
+        )
+
+        for clause_no, clause_text in sections:
+
+            clauses.append(
+                Clause(
+                    document="bns",
+                    clause_no=clause_no,
+                    text=clause_text
+                )
+            )
+
+        return clauses
+
+    def parse_numeric_alpha(
+        self,
+        text: str
+    ):
+
+        return self.build_numeric_structure(
+            text
+        )
+    
+
+    def parse_numeric_alpha_roman(
+        self,
+        text: str
+    ):
+
+        return self.build_numeric_structure(
+            text
+        )
+
+
+
 
     # =====================================================
     # CLAUSES
@@ -180,20 +370,6 @@ class ClauseParser:
         section_text: str
     ) -> List[Clause]:
 
-        # Normalize inline markers
-
-        section_text = re.sub(
-            r"([;:—])\(([a-z])\)",
-            r"\1\n(\2)",
-            section_text
-        )
-
-        section_text = re.sub(
-            r"([.—])\((\d+[A-Za-z]?)\)",
-            r"\1\n(\2)",
-            section_text
-        )
-
         clauses = []
 
         clause_sections = self.split_sections(
@@ -201,46 +377,11 @@ class ClauseParser:
             self.CLAUSE_RE
         )
 
-        def remove_non_clause_parts(
-            text: str
-        ) -> str:
-
-            stop_words = [
-                "Explanation.",
-                "Explanation.—",
-                "Explanation.––",
-                "Illustration.",
-                "Illustrations.",
-                "Exception.",
-                "Exception.—"
-            ]
-
-            cutoff = len(text)
-
-            for word in stop_words:
-
-                pos = text.find(word)
-
-                if pos != -1:
-                    cutoff = min(
-                        cutoff,
-                        pos
-                    )
-
-            return text[:cutoff]
-
-        # ----------------------------------
-        # No numbered clauses
-        # ----------------------------------
-
+        # No numbered clauses present
         if not clause_sections:
 
-            clean_text = remove_non_clause_parts(
-                section_text
-            )
-
             subclauses = self.parse_subclauses(
-                clean_text
+                section_text
             )
 
             if subclauses:
@@ -261,44 +402,32 @@ class ClauseParser:
 
             return clauses
 
-        # ----------------------------------
-        # Numbered clauses
-        # ----------------------------------
-
-        for clause_no, original_clause_text in clause_sections:
+        for clause_no, clause_text in clause_sections:
 
             clause = Clause(
                 document="bns",
                 clause_no=clause_no,
-                text=original_clause_text
-            )
-
-            clean_clause_text = (
-                remove_non_clause_parts(
-                    original_clause_text
-                )
+                text=clause_text
             )
 
             clause.sub_clauses.extend(
                 self.parse_subclauses(
-                    clean_clause_text
+                    clause_text
                 )
             )
-
-            # Handle direct roman clauses
-            if not clause.sub_clauses:
-
-                clause.roman_clauses.extend(
-                    self.parse_roman_clauses(
-                        clean_clause_text
-                    )
+            clause.roman_clauses.extend(
+                self.parse_roman_clauses(
+                    clause_text
                 )
+            )
 
             clauses.append(
                 clause
             )
 
         return clauses
+
+
 
 
     def parse_section_structure(
@@ -330,110 +459,24 @@ class ClauseParser:
             )
         )
 
-        # =====================================
-        # PLAIN SECTION
-        # =====================================
-
-        if (
-            not has_numeric
-            and not has_alpha
-            and not has_capital
-            and not has_roman
-        ):
-            return []
-
-        # =====================================
-        # ALPHA ONLY
-        # (a)(b)(c)
-        # =====================================
-
-        if (
-            not has_numeric
-            and has_alpha
-            and not has_capital
-            and not has_roman
-        ):
-            return self.parse_alpha_clauses(
+        if has_numeric:
+            return self.build_numeric_structure(
                 section_text
             )
 
-        # =====================================
-        # NUMERIC ONLY
-        # (1)(2)(3)
-        # =====================================
-
-        if (
-            has_numeric
-            and not has_alpha
-            and not has_capital
-            and not has_roman
-        ):
-            return self.parse_numeric_clauses(
-                section_text
+        if has_capital:
+            return self.build_alpha_structure(
+                section_text,
+                self.CAPITAL_RE
             )
 
-        # =====================================
-        # NUMERIC -> ALPHA
-        # =====================================
-
-        if (
-            has_numeric
-            and has_alpha
-            and not has_capital
-            and not has_roman
-        ):
-            return self.parse_numeric_alpha(
-                section_text
-            )
-
-        # =====================================
-        # NUMERIC -> ALPHA -> ROMAN
-        # =====================================
-
-        if (
-            has_numeric
-            and has_alpha
-            and not has_capital
-            and has_roman
-        ):
-            return self.parse_numeric_alpha_roman(
-                section_text
-            )
-
-        # =====================================
-        # ALPHA -> ROMAN
-        # (a)
-        #   (i)
-        # =====================================
-
-        if (
-            not has_numeric
-            and has_alpha
-            and not has_capital
-            and has_roman
-        ):
-            return self.parse_alpha_roman(
-                section_text
-            )
-
-        # =====================================
-        # CAPITAL -> ROMAN
-        # (A)
-        #   (i)
-        # =====================================
-
-        if (
-            not has_numeric
-            and has_alpha
-            and has_capital
-            and has_roman
-        ):
-            return self.parse_capital_roman(
-                section_text
+        if has_alpha:
+            return self.build_alpha_structure(
+                section_text,
+                self.ALPHA_RE
             )
 
         return []
-
 
 
 
@@ -447,7 +490,7 @@ class ClauseParser:
 
     def validate_clauses(
         self,
-        
+        section_no,
         clauses: List[Clause]
     ) -> List[str]:
 
@@ -457,20 +500,19 @@ class ClauseParser:
 
         for clause in clauses:
 
-            # if clause.clause_no in seen:
+            if clause.clause_no in seen:
 
-            #     print(
-            #         "\nDUPLICATE CLAUSE FOUND"
-            #     )
+                print("\n" + "="*80)
+                print("section: ",section_no)
+                print("DUPLICATE SUBCLAUSE")
+                print("Clause:", clause.clause_no)
+                print("SubClause:", sub.sub_clause_no)
+                print(sub.text[:1000])
 
-            #     print(
-            #         "Clause:",
-            #         clause.clause_no
-            #     )
-
-            #     print(
-            #         clause.text[:500]
-            #     )
+                errors.append(
+                    f"Duplicate SubClause "
+                    f"{sub.sub_clause_no}"
+                )
 
             seen.add(
                 clause.clause_no
@@ -481,9 +523,6 @@ class ClauseParser:
             for sub in clause.sub_clauses:
 
                 if sub.sub_clause_no in sub_seen:
-
-
-
 
                     errors.append(
                         f"Duplicate SubClause "
@@ -526,7 +565,7 @@ if __name__ == "__main__":
 
         text = f.read()
 
-    cleaner=BNSTextCleaner()
+    cleaner=BNSSTextCleaner()
     text=cleaner.clean(text)
 
  
@@ -537,14 +576,14 @@ if __name__ == "__main__":
     print(len(parser.SUBCLAUSE_RE.findall(text)))
     print(len(parser.ROMAN_RE.findall(text)))
 
-    clauses = parser.parse_clauses(
+    clauses = parser.parse_section_structure(
         text
     )
 
-    # print(
-    #     "Clauses:",
-    #     len(clauses)
-    # )
+    print(
+        "Clauses:",
+        len(clauses)
+    )
 
     # for clause in clauses:
 
@@ -553,8 +592,8 @@ if __name__ == "__main__":
     #         len(clause.sub_clauses)
     #     )
 
-    print(
-        parser.validate_clauses(
-            clauses
-        )
-    )
+    # print(
+    #     parser.validate_clauses(
+    #         clauses
+    #     )
+    # )
