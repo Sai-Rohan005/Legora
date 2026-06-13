@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import List, Optional
 
 from legal_models import Explanation
 
 
 class ExplanationParser:
-
     """
     BNS Explanation Parser
 
@@ -29,11 +28,53 @@ class ExplanationParser:
     # =====================================================
 
     EXPLANATION_RE = re.compile(
-        r"(?im)^Explanation\s*([0-9IVXLCDM]*)\s*[.—:-]"
+        r"(?im)^Explanation\s*([0-9IVXLCDM]*)\s*[\.\-—:]"
     )
 
     # =====================================================
-    # SPLIT EXPLANATIONS
+    # ROMAN NUMERAL NORMALIZATION
+    # =====================================================
+
+    ROMAN_MAP = {
+        "I": "1",
+        "II": "2",
+        "III": "3",
+        "IV": "4",
+        "V": "5",
+        "VI": "6",
+        "VII": "7",
+        "VIII": "8",
+        "IX": "9",
+        "X": "10",
+        "XI": "11",
+        "XII": "12",
+        "XIII": "13",
+        "XIV": "14",
+        "XV": "15",
+        "XVI": "16",
+        "XVII": "17",
+        "XVIII": "18",
+        "XIX": "19",
+        "XX": "20",
+    }
+
+    def normalize_explanation_no(
+        self,
+        explanation_no: str
+    ) -> Optional[str]:
+
+        explanation_no = explanation_no.strip().upper()
+
+        if not explanation_no:
+            return None
+
+        return self.ROMAN_MAP.get(
+            explanation_no,
+            explanation_no
+        )
+
+    # =====================================================
+    # EXTRACT EXPLANATIONS
     # =====================================================
 
     def extract_explanations(
@@ -42,9 +83,7 @@ class ExplanationParser:
     ) -> List[Explanation]:
 
         matches = list(
-            self.EXPLANATION_RE.finditer(
-                text
-            )
+            self.EXPLANATION_RE.finditer(text)
         )
 
         if not matches:
@@ -52,9 +91,7 @@ class ExplanationParser:
 
         explanations = []
 
-        for i, match in enumerate(
-            matches
-        ):
+        for i, match in enumerate(matches):
 
             start = match.start()
 
@@ -64,12 +101,9 @@ class ExplanationParser:
                 else len(text)
             )
 
-            explanation_no = (
-                match.group(1).strip()
+            explanation_no = self.normalize_explanation_no(
+                match.group(1)
             )
-
-            if not explanation_no:
-                explanation_no = "1"
 
             explanation_text = (
                 text[start:end]
@@ -79,11 +113,8 @@ class ExplanationParser:
             explanations.append(
                 Explanation(
                     document="bns",
-                    explanation_no=
-                        explanation_no,
-
-                    text=
-                        explanation_text
+                    explanation_no=explanation_no,
+                    text=explanation_text
                 )
             )
 
@@ -95,38 +126,24 @@ class ExplanationParser:
 
     def validate_explanations(
         self,
+        section_no,
         explanations: List[Explanation]
     ) -> List[str]:
 
         errors = []
 
-        seen = set()
-
         for explanation in explanations:
 
-            if (
-                explanation.explanation_no
-                in seen
-            ):
+            if not explanation.text.strip():
 
-                errors.append(
-                    f"Duplicate "
-                    f"Explanation "
-                    f"{explanation.explanation_no}"
+                label = (
+                    explanation.explanation_no
+                    if explanation.explanation_no
+                    else "Unnumbered"
                 )
 
-            seen.add(
-                explanation.explanation_no
-            )
-
-            if not (
-                explanation.text
-            ):
-
                 errors.append(
-                    f"Empty "
-                    f"Explanation "
-                    f"{explanation.explanation_no}"
+                    f"Empty Explanation {label}"
                 )
 
         return errors
@@ -141,22 +158,23 @@ if __name__ == "__main__":
     sample = """
 Whoever commits an offence shall be punished.
 
-Explanation 1.—
-For the purposes of this section,
-"injury" includes harm illegally
-caused to body, mind or reputation.
+Explanation.—
+This is an unnumbered explanation.
+
+Explanation I.—
+Roman numeral explanation.
 
 Explanation 2.—
-A person may be liable even if
-the consequence was unintended.
+Second explanation.
+
+Explanation II.—
+Duplicate of Explanation 2.
 """
 
     parser = ExplanationParser()
 
-    explanations = (
-        parser.extract_explanations(
-            sample
-        )
+    explanations = parser.extract_explanations(
+        sample
     )
 
     print(
@@ -169,6 +187,7 @@ the consequence was unintended.
     for e in explanations:
 
         print(
+            "Explanation No:",
             e.explanation_no
         )
 
@@ -177,16 +196,19 @@ the consequence was unintended.
         )
 
         print(
-            "-" * 50
+            "-" * 60
         )
 
-    errors = (
-        parser.validate_explanations(
-            explanations
-        )
+    errors = parser.validate_explanations(
+        explanations
     )
+
+    print()
 
     print(
         "Errors:",
         len(errors)
     )
+
+    for error in errors:
+        print(error)

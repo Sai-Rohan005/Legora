@@ -238,6 +238,7 @@ class BNSParser:
                 errors.extend(
                     self.explanation_parser
                     .validate_explanations(
+                        section.section_no,
                         section.explanations
                     )
                 )
@@ -373,7 +374,17 @@ if __name__ == "__main__":
         re.I
     )
     
+    # for m in re.finditer(r"\(\d+[A-Za-z]?\)", text):
 
+    #     start = max(0, m.start() - 60)
+    #     end = min(len(text), m.end() + 100)
+
+    #     context = text[start:end]
+
+    #     if "\n" not in text[max(0, m.start()-5):m.start()]:
+
+    #         print("=" * 80)
+    #         print(context)
 
 
     parser = BNSParser()
@@ -383,139 +394,25 @@ if __name__ == "__main__":
     )
 
     # for chapter in bns.chapters:
-
     #     for section in chapter.sections:
 
-    #         has_numeric = bool(
-    #             NUMERIC_RE.search(section.text)
-    #         )
+    #         if "(a)" in section.text:
 
-    #         has_alpha = bool(
-    #             ALPHA_RE.search(section.text)
-    #         )
-
-    #         has_capital = bool(
-    #             CAPITAL_RE.search(section.text)
-    #         )
-
-    #         has_roman = bool(
-    #             ROMAN_RE.search(section.text)
-    #         )
-
-    #         if (
-    #             has_numeric
-    #             or has_alpha
-    #             or has_capital
-    #             or has_roman
-    #         ):
-
-    #             print("\n" + "=" * 80)
-
-    #             print(
-    #                 f"Section {section.section_no}"
+    #             total_subs = sum(
+    #                 len(c.sub_clauses)
+    #                 for c in section.clauses
     #             )
 
-    #             print(
-    #                 f"Numeric: {has_numeric}"
-    #             )
+    #             if total_subs == 0:
 
-    #             print(
-    #                 f"Alpha: {has_alpha}"
-    #             )
+    #                 print(
+    #                     "\nSECTION:",
+    #                     section.section_no
+    #                 )
 
-    #             print(
-    #                 f"Capital: {has_capital}"
-    #             )
-
-    #             print(
-    #                 f"Roman: {has_roman}"
-    #             )
-
-    #             print(
-    #                 section.text[:1000])
-
-
-
-
-    # def detect_structure(text):
-
-    #     return {
-    #         "numeric": bool(NUMERIC_RE.search(text)),
-    #         "alpha": bool(ALPHA_RE.search(text)),
-    #         "capital": bool(CAPITAL_RE.search(text)),
-    #         "roman": bool(ROMAN_RE.search(text)),
-    #     }
-
-    # from collections import Counter
-
-    # counter = Counter()
-
-    # for chapter in bns.chapters:
-    #     for section in chapter.sections:
-
-    #         s = detect_structure(section.text)
-
-    #         key = (
-    #             s["numeric"],
-    #             s["alpha"],
-    #             s["capital"],
-    #             s["roman"]
-    #         )
-
-    #         counter[key] += 1
-
-    # print(counter)
-
-
-
-    # for chapter in bns.chapters:
-
-    #     for section in chapter.sections:
-
-    #         has_numeric = bool(
-    #             re.search(
-    #                 r'(?m)^\((\d+[A-Z]?)\)',
-    #                 section.text
-    #             )
-    #         )
-
-    #         has_alpha = bool(
-    #             re.search(
-    #                 r'(?m)^\(([a-z])\)',
-    #                 section.text
-    #             )
-    #         )
-
-    #         has_capital = bool(
-    #             re.search(
-    #                 r'(?m)^\(([A-Z])\)',
-    #                 section.text
-    #             )
-    #         )
-
-    #         has_roman = bool(
-    #             re.search(
-    #                 r'(?m)^\(([ivxlcdm]+)\)',
-    #                 section.text,
-    #                 re.I
-    #             )
-    #         )
-
-    #         if sum([
-    #             has_numeric,
-    #             has_alpha,
-    #             has_capital,
-    #             has_roman
-    #         ]) > 1:
-
-    #             print(
-    #                 section.section_no,
-    #                 has_numeric,
-    #                 has_alpha,
-    #                 has_capital,
-    #                 has_roman
-    #             )
-    
+    #                 print(
+    #                     section.text[:2000]
+    #                 )
     
 
     stats = parser.stats(

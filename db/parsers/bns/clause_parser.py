@@ -40,16 +40,15 @@ class ClauseParser:
     # =====================================================
     
     CLAUSE_RE = re.compile(
-        r"\((\d+[A-Za-z]?)\)"
+        r"(?m)^(?:\s*)\((\d+[A-Za-z]?)\)"
     )
 
     SUBCLAUSE_RE = re.compile(
-    r"\(([A-Za-z])\)"
-)
+        r"(?m)^\s*\(([a-z])\)"
+    )
 
     ROMAN_RE = re.compile(
-        r"\(([ivxlcdm]+)\)",
-        re.I
+        r"(?m)^\s*\(([ivxlcdm]+)\)"
     )
 
     # =====================================================
@@ -181,6 +180,20 @@ class ClauseParser:
         section_text: str
     ) -> List[Clause]:
 
+        # Normalize inline markers
+
+        section_text = re.sub(
+            r"([;:—])\(([a-z])\)",
+            r"\1\n(\2)",
+            section_text
+        )
+
+        section_text = re.sub(
+            r"([.—])\((\d+[A-Za-z]?)\)",
+            r"\1\n(\2)",
+            section_text
+        )
+
         clauses = []
 
         clause_sections = self.split_sections(
@@ -188,11 +201,46 @@ class ClauseParser:
             self.CLAUSE_RE
         )
 
-        # No numbered clauses present
+        def remove_non_clause_parts(
+            text: str
+        ) -> str:
+
+            stop_words = [
+                "Explanation.",
+                "Explanation.—",
+                "Explanation.––",
+                "Illustration.",
+                "Illustrations.",
+                "Exception.",
+                "Exception.—"
+            ]
+
+            cutoff = len(text)
+
+            for word in stop_words:
+
+                pos = text.find(word)
+
+                if pos != -1:
+                    cutoff = min(
+                        cutoff,
+                        pos
+                    )
+
+            return text[:cutoff]
+
+        # ----------------------------------
+        # No numbered clauses
+        # ----------------------------------
+
         if not clause_sections:
 
-            subclauses = self.parse_subclauses(
+            clean_text = remove_non_clause_parts(
                 section_text
+            )
+
+            subclauses = self.parse_subclauses(
+                clean_text
             )
 
             if subclauses:
@@ -213,32 +261,44 @@ class ClauseParser:
 
             return clauses
 
-        for clause_no, clause_text in clause_sections:
+        # ----------------------------------
+        # Numbered clauses
+        # ----------------------------------
+
+        for clause_no, original_clause_text in clause_sections:
 
             clause = Clause(
                 document="bns",
                 clause_no=clause_no,
-                text=clause_text
+                text=original_clause_text
+            )
+
+            clean_clause_text = (
+                remove_non_clause_parts(
+                    original_clause_text
+                )
             )
 
             clause.sub_clauses.extend(
                 self.parse_subclauses(
-                    clause_text
+                    clean_clause_text
                 )
             )
-            clause.roman_clauses.extend(
-                self.parse_roman_clauses(
-                    clause_text
+
+            # Handle direct roman clauses
+            if not clause.sub_clauses:
+
+                clause.roman_clauses.extend(
+                    self.parse_roman_clauses(
+                        clean_clause_text
+                    )
                 )
-            )
 
             clauses.append(
                 clause
             )
 
         return clauses
-
-
 
 
     def parse_section_structure(
@@ -387,6 +447,7 @@ class ClauseParser:
 
     def validate_clauses(
         self,
+        
         clauses: List[Clause]
     ) -> List[str]:
 
@@ -396,12 +457,20 @@ class ClauseParser:
 
         for clause in clauses:
 
-            if clause.clause_no in seen:
+            # if clause.clause_no in seen:
 
-                errors.append(
-                    f"Duplicate Clause "
-                    f"{clause.clause_no}"
-                )
+            #     print(
+            #         "\nDUPLICATE CLAUSE FOUND"
+            #     )
+
+            #     print(
+            #         "Clause:",
+            #         clause.clause_no
+            #     )
+
+            #     print(
+            #         clause.text[:500]
+            #     )
 
             seen.add(
                 clause.clause_no
@@ -413,10 +482,24 @@ class ClauseParser:
 
                 if sub.sub_clause_no in sub_seen:
 
-                    errors.append(
-                        f"Duplicate SubClause "
-                        f"{sub.sub_clause_no}"
+                    
+                    print(
+                        "CLAUSE:",
+                        clause.clause_no
                     )
+
+                    print(
+                        clause.text[:5000]
+                    )
+
+                    raise SystemExit
+
+
+
+                    # errors.append(
+                    #     f"Duplicate SubClause "
+                    #     f"{sub.sub_clause_no}"
+                    # )
 
                 sub_seen.add(
                     sub.sub_clause_no
@@ -469,10 +552,10 @@ if __name__ == "__main__":
         text
     )
 
-    print(
-        "Clauses:",
-        len(clauses)
-    )
+    # print(
+    #     "Clauses:",
+    #     len(clauses)
+    # )
 
     # for clause in clauses:
 
@@ -481,8 +564,8 @@ if __name__ == "__main__":
     #         len(clause.sub_clauses)
     #     )
 
-    # print(
-    #     parser.validate_clauses(
-    #         clauses
-    #     )
-    # )
+    print(
+        parser.validate_clauses(
+            clauses
+        )
+    )
