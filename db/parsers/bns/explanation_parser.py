@@ -30,6 +30,22 @@ class ExplanationParser:
     EXPLANATION_RE = re.compile(
         r"(?im)^Explanation\s*([0-9IVXLCDM]*)\s*[\.\-—:]"
     )
+    STOP_RE = re.compile(
+        r"(?im)^("
+        r"Explanation\s*"
+        r"|Illustration[s]?\."
+        r"|Exception\s*[.—:-]"
+        r"|\(\d+[A-Za-z]?\)"
+        r")"
+    )
+    NEXT_BLOCK_RE = re.compile(
+        r"(?im)^("
+        r"Explanation\s*"
+        r"|Illustration[s]?\."
+        r"|Exception\s*[.—:-]"
+        r"|\(\d+[A-Za-z]?\)"
+        r")"
+    )
 
     # =====================================================
     # ROMAN NUMERAL NORMALIZATION
@@ -95,14 +111,35 @@ class ExplanationParser:
 
             start = match.start()
 
-            end = (
-                matches[i + 1].start()
-                if i + 1 < len(matches)
-                else len(text)
-            )
+            if i + 1 < len(matches):
 
-            explanation_no = self.normalize_explanation_no(
-                match.group(1)
+                end = matches[i + 1].start()
+
+            else:
+
+                end = len(text)
+
+                remaining = text[start:]
+
+                
+
+                next_block = list(
+                    self.NEXT_BLOCK_RE.finditer(
+                        remaining
+                    )
+                )
+
+                if len(next_block) > 1:
+
+                    end = (
+                        start +
+                        next_block[1].start()
+                    )
+
+            explanation_no = (
+                self.normalize_explanation_no(
+                    match.group(1)
+                )
             )
 
             explanation_text = (
@@ -113,13 +150,15 @@ class ExplanationParser:
             explanations.append(
                 Explanation(
                     document="bns",
-                    explanation_no=explanation_no,
-                    text=explanation_text
+                    explanation_no=
+                        explanation_no,
+
+                    text=
+                        explanation_text
                 )
             )
 
         return explanations
-
     # =====================================================
     # VALIDATION
     # =====================================================
