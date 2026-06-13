@@ -51,17 +51,16 @@ class ClauseParser:
     )
 
     ROMAN_RE = re.compile(
-        r'(?m)^\((i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv)\)',
+        r'(?:(?<=\n)|(?<=;)|(?<=:)|(?<=—)|(?<=\.)|^)\s*\((i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx)\)',
         re.I
     )
     CLAUSE_RE = re.compile(
-        r"\((\d+[A-Za-z]?)\)"
+        r'(?m)^\s*\((\d+[A-Z]?)\)'
     )
 
     SUBCLAUSE_RE = re.compile(
-        r'(?m)^\(([a-z])\)'
+        r'(?m)^\s*\(([a-z])\)'
     )
-
 
     # =====================================================
     # SPLIT SECTIONS
@@ -491,6 +490,7 @@ class ClauseParser:
 
     def validate_clauses(
         self,
+        section_no,
         clauses: List[Clause]
     ) -> List[str]:
 
@@ -502,9 +502,16 @@ class ClauseParser:
 
             if clause.clause_no in seen:
 
+                print("\n" + "="*80)
+                print("section: ",section_no)
+                print("DUPLICATE SUBCLAUSE")
+                print("Clause:", clause.clause_no)
+                print("SubClause:", sub.sub_clause_no)
+                print(sub.text[:1000])
+
                 errors.append(
-                    f"Duplicate Clause "
-                    f"{clause.clause_no}"
+                    f"Duplicate SubClause "
+                    f"{sub.sub_clause_no}"
                 )
 
             seen.add(
@@ -569,7 +576,7 @@ if __name__ == "__main__":
     print(len(parser.SUBCLAUSE_RE.findall(text)))
     print(len(parser.ROMAN_RE.findall(text)))
 
-    clauses = parser.parse_clauses(
+    clauses = parser.parse_section_structure(
         text
     )
 

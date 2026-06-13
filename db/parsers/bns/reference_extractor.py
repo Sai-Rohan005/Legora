@@ -122,16 +122,20 @@ class ReferenceExtractor:
 
         for ref in refs:
 
-            if (
-                ref["source_section"]
-                ==
-                ref["target_section"]
-            ):
-
+            # Skip malformed references
+            if not isinstance(ref, dict):
                 errors.append(
-                    f"Self reference "
-                    f"Section "
-                    f"{ref['source_section']}"
+                    "Invalid reference object"
+                )
+                continue
+
+            if (
+                "source_section" not in ref
+                or
+                "target_section" not in ref
+            ):
+                errors.append(
+                    "Reference missing source/target section"
                 )
 
         return errors
