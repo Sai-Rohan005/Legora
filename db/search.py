@@ -7,6 +7,7 @@ from db.embedder import (
 from db.vector_store import (
     QdrantStore
 )
+from db.neo4j_store import Neo4jStore
 
 from symspellpy import SymSpell, Verbosity
 
@@ -34,30 +35,41 @@ def spell_correct(text: str) -> str:
 
     return text
 
-class LegalSearcher:
+
+
+
+
+class LegalRetriever:
 
     def __init__(
         self,
-        collection_name: str =
-        "legal_rag"
+        collection_name: str = "legal_rag"
     ):
 
         self.embedder = (
             LegalEmbedder()
         )
 
-        self.store = (
+        self.qdrant = (
             QdrantStore(
                 collection_name=
                     collection_name
             )
         )
 
+        self.graph = (
+            Neo4jStore(
+                uri="bolt://localhost:7687",
+                username="neo4j",
+                password="password"
+            )
+        )
+
     # =====================================================
-    # SEARCH
+    # VECTOR SEARCH
     # =====================================================
 
-    def search(
+    def vector_search(
         self,
         query: str,
         limit: int = 10
@@ -71,95 +83,251 @@ class LegalSearcher:
         )
 
         results = (
-            self.store.search(
+            self.qdrant.search(
                 query_vector,
-                limit=limit
+                limit
             )
         )
 
-        return results
+        return results.points
 
     # =====================================================
-    # PRETTY PRINT
+    # NODE EXTRACTION
     # =====================================================
 
-    def print_results(
+    def extract_nodes(
         self,
-        results
+        points
     ):
 
-        for rank, point in enumerate(
-            results.points,
-            start=1
-        ):
+        nodes = []
 
-            payload = (
-                point.payload
+        seen = set()
+
+        for point in points:
+
+            payload = point.payload
+
+            node_id = payload.get(
+                "node_id"
             )
 
-            print(
-                "\n" +
-                "=" * 80
+            node_type = payload.get(
+                "node_type"
             )
 
-            print(
-                f"Rank      : {rank}"
+            if not node_id:
+                continue
+
+            if node_id in seen:
+                continue
+
+            seen.add(
+                node_id
             )
 
-            print(
-                f"Score     : "
-                f"{point.score:.4f}"
+            nodes.append(
+                {
+                    "node_id":
+                        node_id,
+
+                    "node_type":
+                        node_type,
+
+                    "document":
+                        payload.get(
+                            "document"
+                        )
+                }
             )
 
-            print(
-                f"Chunk ID  : "
-                f"{payload.get('chunk_id')}"
+        return nodes
+
+    # =====================================================
+    # SECTION EXPANSION
+    # =====================================================
+
+    def expand_section(
+        self,
+        node_id: str
+    ):
+
+        query = """
+        MATCH (s:Section {id:$id})
+
+        OPTIONAL MATCH (s)-[:HAS_CLAUSE]->(c)
+
+        OPTIONAL MATCH (s)-[:HAS_EXPLANATION]->(e)
+
+        OPTIONAL MATCH (s)-[:HAS_ILLUSTRATION]->(i)
+
+        OPTIONAL MATCH (s)-[:REFERENCES]->(r)
+
+        RETURN
+            s,
+            collect(distinct c) as clauses,
+            collect(distinct e) as explanations,
+            collect(distinct i) as illustrations,
+            collect(distinct r) as references
+        """
+
+        return (
+            self.graph.run_query(
+                query,
+                {
+                    "id": node_id
+                }
+            )
+        )
+
+    # =====================================================
+    # ARTICLE EXPANSION
+    # =====================================================
+
+    def expand_article(
+        self,
+        node_id: str
+    ):
+
+        query = """
+        MATCH (a:Article {id:$id})
+
+        OPTIONAL MATCH (a)-[:HAS_CLAUSE]->(c)
+
+        OPTIONAL MATCH (a)-[:HAS_PROVISO]->(p)
+
+        OPTIONAL MATCH (a)-[:HAS_EXPLANATION]->(e)
+
+        OPTIONAL MATCH (a)-[:REFERENCES]->(r)
+
+        RETURN
+            a,
+            collect(distinct c) as clauses,
+            collect(distinct p) as provisos,
+            collect(distinct e) as explanations,
+            collect(distinct r) as references
+        """
+
+        return (
+            self.graph.run_query(
+                query,
+                {
+                    "id": node_id
+                }
+            )
+        )
+
+    # =====================================================
+    # CLAUSE EXPANSION
+    # =====================================================
+
+    def expand_clause(
+        self,
+        node_id: str
+    ):
+
+        query = """
+        MATCH (c:Clause {id:$id})
+
+        OPTIONAL MATCH (c)-[:HAS_SUBCLAUSE]->(s)
+
+        RETURN
+            c,
+            collect(distinct s) as subclauses
+        """
+
+        return (
+            self.graph.run_query(
+                query,
+                {
+                    "id": node_id
+                }
+            )
+        )
+
+    # =====================================================
+    # GENERIC EXPANSION
+    # =====================================================
+
+    def expand_node(
+        self,
+        node
+    ):
+
+        node_type = (
+            node["node_type"]
+        )
+
+        node_id = (
+            node["node_id"]
+        )
+
+        if node_type == "Section":
+
+            return self.expand_section(
+                node_id
             )
 
-            print(
-                f"Document  : "
-                f"{payload.get('document')}"
+        if node_type == "Article":
+
+            return self.expand_article(
+                node_id
             )
 
-            print(
-                f"Level     : "
-                f"{payload.get('level')}"
+        if node_type == "Clause":
+
+            return self.expand_clause(
+                node_id
             )
 
-            if payload.get(
-                "chapter_no"
-            ):
-                print(
-                    f"Chapter   : "
-                    f"{payload['chapter_no']}"
+        return []
+
+    # =====================================================
+    # HYBRID RETRIEVAL
+    # =====================================================
+
+    def retrieve(
+        self,
+        query: str,
+        vector_k: int = 10
+    ):
+
+        vector_points = (
+            self.vector_search(
+                query,
+                vector_k
+            )
+        )
+
+        nodes = (
+            self.extract_nodes(
+                vector_points
+            )
+        )
+
+        graph_context = []
+
+        for node in nodes:
+
+            graph_context.extend(
+                self.expand_node(
+                    node
                 )
-
-            if payload.get(
-                "section_no"
-            ):
-                print(
-                    f"Section   : "
-                    f"{payload['section_no']}"
-                )
-
-            if payload.get(
-                "article_no"
-            ):
-                print(
-                    f"Article   : "
-                    f"{payload['article_no']}"
-                )
-
-            print()
-
-            print(
-                payload.get(
-                    "text",
-                    ""
-                )[:2000]
             )
 
+        return {
+            "query":
+                query,
 
+            "vector_results":
+                vector_points,
+
+            "expanded_nodes":
+                nodes,
+
+            "graph_context":
+                graph_context
+        }
 # =========================================================
 # TEST
 # =========================================================
@@ -167,7 +335,7 @@ class LegalSearcher:
 if __name__ == "__main__":
 
     searcher = (
-        LegalSearcher(
+        LegalRetriever(
             collection_name=
                 "legal_rag"
         )

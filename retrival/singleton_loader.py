@@ -2,7 +2,7 @@
 
 from sentence_transformers import SentenceTransformer
 from db.vector_store import QdrantIngestor
-from db.graph_db import LegalGraphDB
+from db.neo4j_store import LegalGraphDB
 
 
 class AppContext:

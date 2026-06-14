@@ -7,9 +7,13 @@ from db.all_chunks import (
 from db.ingest import (
     LegalIngestionPipeline
 )
+from db.graph_builders.all_loader import AllFilesLoader
 
 
 def main():
+    print("Inserting into neo4j")
+    loader=AllFilesLoader()
+    loader.main()
 
     print(
         "\nBuilding Legal Corpus...\n"
