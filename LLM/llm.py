@@ -8,7 +8,7 @@ class LegalLLM:
     def __init__(
         self,
         api_key: str,
-        model: str = "gemini-2.5-flash"
+        model: str = "gemini-2.5-flash-lite"
     ):
 
         self.model = model
