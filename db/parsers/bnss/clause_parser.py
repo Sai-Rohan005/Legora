@@ -111,7 +111,7 @@ class ClauseParser:
 
             romans.append(
                 RomanClause(
-                    document="bns",
+                    document="bnss",
                     roman_no=roman_no,
                     text=roman_text
                 )
@@ -154,7 +154,7 @@ class ClauseParser:
                 continue
 
             sub = SubClause(
-                document="bns",
+                document="bnss",
                 sub_clause_no=sub_no,
                 text=sub_text
             )
@@ -246,7 +246,7 @@ class ClauseParser:
             if subclauses:
 
                 synthetic_clause = Clause(
-                    document="bns",
+                    document="bnss",
                     clause_no="0",
                     text=section_text
                 )
@@ -268,7 +268,7 @@ class ClauseParser:
         for clause_no, original_clause_text in clause_sections:
 
             clause = Clause(
-                document="bns",
+                document="bnss",
                 clause_no=clause_no,
                 text=original_clause_text
             )
@@ -522,7 +522,7 @@ class ClauseParser:
 if __name__ == "__main__":
 
     with open(
-        "../../pdfs/bns.txt",
+        "../../pdfs/bnss.txt",
         "r",
         encoding="utf8"
     ) as f:

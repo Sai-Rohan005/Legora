@@ -1,7 +1,7 @@
 import re
 
 
-class BNSSTextCleaner:
+class BSATextCleaner:
 
     @staticmethod
     def clean(text: str) -> str:
@@ -15,11 +15,6 @@ class BNSSTextCleaner:
 
         # =====================================
         # Remove Gazette headers
-        # Examples:
-        #
-        # THE GAZETTE OF INDIA EXTRAORDINARY
-        # 46 THE GAZETTE OF INDIA EXTRAORDINARY
-        # [PART II—
         # =====================================
 
         text = re.sub(
@@ -49,11 +44,34 @@ class BNSSTextCleaner:
         )
 
         # =====================================
-        # Remove notification footnotes
+        # Remove notification notes
         # =====================================
 
         text = re.sub(
             r"(?im)^\d+\.\s+vide\s+notification.*?$",
+            "",
+            text
+        )
+
+        # =====================================
+        # Remove page numbers
+        # =====================================
+
+        text = re.sub(
+            r"(?m)^\d+\s*$",
+            "",
+            text
+        )
+
+        # =====================================
+        # Remove standalone page references
+        #
+        # 46.
+        # 127.
+        # =====================================
+
+        text = re.sub(
+            r"(?m)^\d+\.\s*$",
             "",
             text
         )
@@ -69,37 +87,7 @@ class BNSSTextCleaner:
         )
 
         # =====================================
-        # Remove page numbers
-        #
-        # 46
-        # 127
-        # =====================================
-
-        text = re.sub(
-            r"(?m)^\d+\s*$",
-            "",
-            text
-        )
-
-        # =====================================
-        # Remove standalone section numbers
-        #
-        # 150.
-        # 230.
-        # 409.
-        #
-        # Keeps:
-        # 150. Police may...
-        # =====================================
-
-        text = re.sub(
-            r"(?m)^\d+\.\s*$",
-            "",
-            text
-        )
-
-        # =====================================
-        # Remove OCR underscore blocks
+        # Remove OCR underline blocks
         # =====================================
 
         text = re.sub(
@@ -109,7 +97,46 @@ class BNSSTextCleaner:
         )
 
         # =====================================
-        # Remove excessive spaces
+        # Remove form-feed characters
+        # =====================================
+
+        text = text.replace(
+            "\f",
+            "\n"
+        )
+
+        # =====================================
+        # Fix broken words
+        #
+        # exam-
+        # ple
+        # ->
+        # example
+        # =====================================
+
+        text = re.sub(
+            r"([a-zA-Z])-\n([a-zA-Z])",
+            r"\1\2",
+            text
+        )
+
+        # =====================================
+        # Join OCR split words
+        #
+        # evi
+        # dence
+        #
+        # only when lowercase
+        # =====================================
+
+        text = re.sub(
+            r"([a-z])\n([a-z])",
+            r"\1 \2",
+            text
+        )
+
+        # =====================================
+        # Normalize spaces
         # =====================================
 
         text = re.sub(
@@ -118,35 +145,18 @@ class BNSSTextCleaner:
             text
         )
 
-
         # =====================================
-        # Remove marginal note blocks
-        # Example:
-        #
-        # Security for
-        # good
-        # behaviour
-        # from habitual
-        # offenders.
+        # Remove trailing spaces
         # =====================================
 
         text = re.sub(
-            r"""
-            (?mx)
-            ^
-            (?:
-                [A-Z][A-Za-z' -]{0,40}
-                \n
-            ){2,8}
-            [A-Za-z' -]{0,50}\.
-            $
-            """,
-            "",
+            r"[ \t]+\n",
+            "\n",
             text
-        )   
-        
+        )
+
         # =====================================
-        # Collapse empty lines
+        # Collapse blank lines
         # =====================================
 
         text = re.sub(

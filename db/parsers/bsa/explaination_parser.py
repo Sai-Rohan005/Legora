@@ -149,7 +149,7 @@ class ExplanationParser:
 
             explanations.append(
                 Explanation(
-                    document="bnss",
+                    document="bsa",
                     explanation_no=
                         explanation_no,
 
