@@ -1,7 +1,7 @@
 # app_context.py
 
 from sentence_transformers import SentenceTransformer
-from db.vector_db import QdrantIngestor
+from db.vector_store import QdrantIngestor
 from db.graph_db import LegalGraphDB
 
 

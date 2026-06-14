@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 from typing import List
 
-from cleaner import BNSTextCleaner
-from legal_models import (
+from db.parsers.bns.cleaner import BNSTextCleaner
+from db.parsers.bns.legal_models import (
     Clause,
     SubClause,
     RomanClause

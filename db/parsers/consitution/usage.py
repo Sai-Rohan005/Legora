@@ -1,12 +1,12 @@
-from embeddings_test import (
+from db.parsers.consitution.embeddings_test import (
     EmbeddingGenerator
 )
 
-from qdrant_store import (
+from db.parsers.consitution.qdrant_store import (
     QdrantStore
 )
-from constitution_parser import ConstitutionParser
-from chunker_test import LegalChunker
+from db.parsers.consitution.constitution_parser import ConstitutionParser
+from db.parsers.consitution.chunker import LegalChunker
 
 
 with open(

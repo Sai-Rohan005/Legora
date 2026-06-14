@@ -1,5 +1,5 @@
-from embedder_temp import LegalEmbedder
-from qdrant_store import QdrantStore
+from db.parsers.bnss.embedder_temp import LegalEmbedder
+from db.parsers.bnss.qdrant_store import QdrantStore
 
 
 class BNSSRetriever:

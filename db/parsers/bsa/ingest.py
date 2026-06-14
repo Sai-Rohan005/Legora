@@ -6,11 +6,11 @@ from qdrant_client.models import (
     PointStruct
 )
 
-from embedder import (
+from db.parsers.bsa.embedder import (
     LegalEmbedder
 )
 
-from qdrant_store import (
+from db.parsers.bsa.qdrant_store import (
     QdrantStore
 )
 

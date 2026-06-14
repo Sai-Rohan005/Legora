@@ -1,9 +1,9 @@
 from collections import Counter
 
-from cleaner import BNSTextCleaner
-from bns_parser import BNSParser
+from db.parsers.bns.cleaner import BNSTextCleaner
+from db.parsers.bns.bns_parser import BNSParser
 
-from chunk_temp import (
+from db.parsers.bns.chunker import (
     LegalChunker,
     chunks_to_dicts
 )

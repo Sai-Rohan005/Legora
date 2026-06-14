@@ -132,7 +132,6 @@ class BNSSTextCleaner:
 
         text = re.sub(
             r"""
-            (?mx)
             ^
             (?:
                 [A-Z][A-Za-z' -]{0,40}
@@ -142,9 +141,10 @@ class BNSSTextCleaner:
             $
             """,
             "",
-            text
-        )   
-        
+            text,
+            flags=re.MULTILINE | re.VERBOSE
+        )  
+
         # =====================================
         # Collapse empty lines
         # =====================================

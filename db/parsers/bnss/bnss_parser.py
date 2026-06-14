@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from chapter_parser import ChapterParser
-from section_parser import SectionParser
-from clause_parser import ClauseParser
-from explanation_parser import ExplanationParser
-from reference_extractor import ReferenceExtractor
-from cleaner import BNSSTextCleaner
+from db.parsers.bnss.chapter_parser import ChapterParser
+from db.parsers.bnss.section_parser import SectionParser
+from db.parsers.bnss.clause_parser import ClauseParser
+from db.parsers.bnss.explanation_parser import ExplanationParser
+from db.parsers.bnss.reference_extractor import ReferenceExtractor
+from db.parsers.bnss.cleaner import BNSSTextCleaner
 import re
-from legal_models import (
+from db.parsers.bnss.legal_models import (
     BNSSDocument,
     Chapter,
     Section
