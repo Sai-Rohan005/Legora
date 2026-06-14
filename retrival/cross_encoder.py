@@ -1,42 +1,85 @@
+from __future__ import annotations
+
 from sentence_transformers import CrossEncoder
-from typing import List, Dict
 
 
 class LegalReranker:
 
     def __init__(
         self,
-        model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        model_name: str =
+        "cross-encoder/ms-marco-MiniLM-L-6-v2"
     ):
-        self.model = CrossEncoder(model_name)
+
+        self.model = CrossEncoder(
+            model_name
+        )
+
+    # =====================================================
+    # RERANK
+    # =====================================================
 
     def rerank(
         self,
         query: str,
-        results: List[Dict],
+        points,
         top_k: int = 5
-    ) -> List[Dict]:
+    ):
 
-        if not results:
+        if not points:
             return []
 
-        # build (query, document) pairs
-        pairs = [
-            (query, r["text"])
-            for r in results
-        ]
+        pairs = []
 
-        # predict relevance scores
-        scores = self.model.predict(pairs)
+        for point in points:
 
-        # attach scores
-        for r, s in zip(results, scores):
-            r["rerank_score"] = float(s)
+            payload = point.payload
 
-        # sort by rerank score
-        results.sort(
-            key=lambda x: x["rerank_score"],
+            text = (
+                payload.get(
+                    "enriched_text"
+                )
+                or
+                payload.get(
+                    "text",
+                    ""
+                )
+            )
+
+            pairs.append(
+                (
+                    query,
+                    text
+                )
+            )
+
+        scores = (
+            self.model.predict(
+                pairs
+            )
+        )
+
+        ranked = []
+
+        for point, score in zip(
+            points,
+            scores
+        ):
+
+            ranked.append(
+                (
+                    float(score),
+                    point
+                )
+            )
+
+        ranked.sort(
+            key=lambda x: x[0],
             reverse=True
         )
 
-        return results[:top_k]
+        return [
+            point
+            for score, point
+            in ranked[:top_k]
+        ]

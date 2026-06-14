@@ -1,104 +1,267 @@
-from typing import List, Dict, Any
-import numpy as np
+from __future__ import annotations
+
+from db.embedder import LegalEmbedder
+from db.vector_store import QdrantStore
+from db.neo4j_store import Neo4jStore
+from retrival.cross_encoder import LegalReranker
 
 
 class HybridRetriever:
 
-    def __init__(self, embedder, qdrant, graph):
-        self.embedder = embedder
-        self.qdrant = qdrant
-        self.graph = graph
+    def __init__(self):
 
-    # -----------------------------
-    # MAIN SEARCH
-    # -----------------------------
-    def search(self, query: str, limit: int = 5):
+        self.embedder = LegalEmbedder()
 
-        # 1. VECTOR SEARCH (Qdrant)
-        vector_results = self._vector_search(query, limit)
-
-        # 2. GRAPH SEARCH (Neo4j)
-        graph_results = self._graph_search(query)
-
-        # 3. MERGE RESULTS
-        return self._merge_results(vector_results, graph_results)
-
-    # -----------------------------
-    # VECTOR SEARCH
-    # -----------------------------
-    def _vector_search(self, query: str, limit: int):
-
-        query_embedding = self.embedder.model.encode(
-            query,
-            normalize_embeddings=True
-        ).tolist()
-
-        results = self.qdrant.search(
-            query_vector=query_embedding,
-            limit=limit
+        self.vector_db = QdrantStore(
+            collection_name="legal_rag"
         )
 
-        return [
-            {
-                "source": "vector",
-                "text": r.payload.get("embedding_text"),
-                "metadata": r.payload,
-                "score": r.score
-            }
-            for r in results
-        ]
+        self.graph = Neo4jStore(
+            uri="bolt://localhost:7687",
+            username="neo4j",
+            password="test12345"
+        )
 
-    # -----------------------------
-    # GRAPH SEARCH (simple Cypher fallback)
-    # -----------------------------
-    def _graph_search(self, query: str):
+    # =====================================================
+    # VECTOR SEARCH
+    # =====================================================
 
-        cypher = """
-        MATCH (n:LegalChunk)
-        WHERE toLower(n.embedding_text) CONTAINS toLower($query)
-        RETURN n.embedding_text AS text,
-               n.metadata AS metadata
-        LIMIT 5
+    def vector_search(
+        self,
+        query: str,
+        k: int = 10
+    ):
+
+        query_vector = (
+            self.embedder.embed_query(
+                query
+            )
+        )
+
+        result = (
+            self.vector_db.search(
+                query_vector=query_vector,
+                limit=k
+            )
+        )
+
+        return result.points
+
+    # =====================================================
+    # NODE IDS
+    # =====================================================
+
+    def extract_ids(
+        self,
+        points
+    ):
+
+        ids = set()
+
+        for point in points:
+
+            payload = point.payload
+
+            chunk_id = payload.get(
+                "chunk_id"
+            )
+
+            if not chunk_id:
+                continue
+
+            # BSA-52(1)(a)
+            # BNS-103
+            # CONST-21
+
+            root_id = (
+                chunk_id
+                .split("-EXPL")[0]
+                .split("-ILL")[0]
+            )
+
+            ids.add(root_id)
+
+        return list(ids)
+
+    # =====================================================
+    # ANCESTORS
+    # =====================================================
+
+    def get_ancestors(
+        self,
+        node_id: str
+    ):
+
+        query = """
+        MATCH p=(n {id:$id})
+        -[:BELONGS_TO*0..10]->
+        (parent)
+
+        RETURN p
         """
 
-        with self.graph.driver.session() as session:
-            result = session.run(cypher, query=query)
-
-            return [
-                {
-                    "source": "graph",
-                    "text": record["text"],
-                    "metadata": record["metadata"]
-                }
-                for record in result
-            ]
-
-    # -----------------------------
-    # MERGE + RERANK
-    # -----------------------------
-    def _merge_results(self, vector_results, graph_results):
-
-        all_results = vector_results + graph_results
-
-        # simple dedup by text
-        seen = set()
-        unique = []
-
-        for r in all_results:
-            key = r["text"]
-            if key not in seen:
-                seen.add(key)
-                unique.append(r)
-
-        # optional: boost vector results
-        for r in unique:
-            if r["source"] == "vector":
-                r["score"] = r.get("score", 0) + 0.1
-
-        # sort by score if exists
-        unique.sort(
-            key=lambda x: x.get("score", 0),
-            reverse=True
+        return self.graph.run_query(
+            query,
+            {"id": node_id}
         )
 
-        return unique
+    # =====================================================
+    # CHILDREN
+    # =====================================================
+
+    def get_children(
+        self,
+        node_id: str
+    ):
+
+        query = """
+        MATCH p=(n {id:$id})
+        -[:HAS_ARTICLE|
+          HAS_CHAPTER|
+          HAS_SECTION|
+          HAS_CLAUSE|
+          HAS_SUBCLAUSE|
+          HAS_ROMANCLAUSE|
+          HAS_PROVISO|
+          HAS_EXPLANATION|
+          HAS_ILLUSTRATION*0..3]->
+        (child)
+
+        RETURN p
+        """
+
+        return self.graph.run_query(
+            query,
+            {"id": node_id}
+        )
+
+    # =====================================================
+    # REFERENCES
+    # =====================================================
+
+    def get_references(
+        self,
+        node_id: str
+    ):
+
+        query = """
+        MATCH (n {id:$id})
+        -[:REFERENCES]->
+        (ref)
+
+        RETURN ref
+        """
+
+        return self.graph.run_query(
+            query,
+            {"id": node_id}
+        )
+
+    # =====================================================
+    # GRAPH EXPANSION
+    # =====================================================
+
+    def expand_graph(
+        self,
+        node_ids
+    ):
+
+        graph_context = {}
+
+        for node_id in node_ids:
+
+            graph_context[node_id] = {
+
+                "ancestors":
+                    self.get_ancestors(
+                        node_id
+                    ),
+
+                "children":
+                    self.get_children(
+                        node_id
+                    ),
+
+                "references":
+                    self.get_references(
+                        node_id
+                    )
+            }
+
+        return graph_context
+
+    # =====================================================
+    # HYBRID RETRIEVE
+    # =====================================================
+
+    def retrieve(
+        self,
+        query: str,
+        vector_k: int = 30,
+        rerank_k: int = 5
+    ):
+
+        # -----------------------------------------
+        # Vector Search
+        # -----------------------------------------
+
+        points = (
+            self.vector_search(
+                query,
+                vector_k
+            )
+        )
+
+        # -----------------------------------------
+        # Rerank
+        # -----------------------------------------
+
+        reranked_points = (
+            self.reranker.rerank(
+                query=query,
+                points=points,
+                top_k=rerank_k
+            )
+        )
+
+        # -----------------------------------------
+        # Node IDs
+        # -----------------------------------------
+
+        node_ids = (
+            self.extract_ids(
+                reranked_points
+            )
+        )
+
+        # -----------------------------------------
+        # Graph Expansion
+        # -----------------------------------------
+
+        graph_context = (
+            self.expand_graph(
+                node_ids
+            )
+        )
+
+        # -----------------------------------------
+        # Return
+        # -----------------------------------------
+
+        return {
+
+            "query":
+                query,
+
+            "vector_results":
+                points,
+
+            "reranked_results":
+                reranked_points,
+
+            "node_ids":
+                node_ids,
+
+            "graph_context":
+                graph_context
+        }
