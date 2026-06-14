@@ -1,35 +1,35 @@
 from __future__ import annotations
 
-from cleaner import BSATextCleaner
-from legal_models import (
+from db.parsers.bsa.cleaner import BSATextCleaner
+from db.parsers.bsa.legal_models import (
     LegalDocument
 )
 
-from part_parser import (
+from db.parsers.bsa.part_parser import (
     PartParser
 )
 
-from chapter_parser import (
+from db.parsers.bsa.chapter_parser import (
     ChapterParser
 )
 
-from section_parser import (
+from db.parsers.bsa.section_parser import (
     SectionParser
 )
 
-from clause_parser import (
+from db.parsers.bsa.clause_parser import (
     ClauseParser
 )
 
-from explaination_parser import (
+from db.parsers.bsa.explaination_parser import (
     ExplanationParser
 )
 
-from illustration_parser import (
+from db.parsers.bsa.illustration_parser import (
     IllustrationParser
 )
 
-from reference_parser import (
+from db.parsers.bsa.reference_parser import (
     ReferenceExtractor
 )
 

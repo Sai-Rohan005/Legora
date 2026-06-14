@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from typing import List, Dict
-from cleaner import BNSSTextCleaner
+from db.parsers.bnss.cleaner import BNSSTextCleaner
 
 
 class SectionParser:

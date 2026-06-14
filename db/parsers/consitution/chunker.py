@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Any
-from parsers.consitution.constitution_parser import ConstitutionParser
+from db.parsers.consitution.constitution_parser import ConstitutionParser
 
 # =========================================================
 # LEGAL CHUNK
@@ -407,26 +407,133 @@ class LegalChunker:
 
 
 
-if __name__ == "__main__":
+def build_enriched_text(
+    chunk: LegalChunk
+) -> str:
 
-    with open(
-        "../../pdfs/constitution.txt",
-        "r",
-        encoding="utf8"
-    ) as f:
+    m = chunk.metadata
 
-        text = f.read()
+    parts = [
+        "Constitution of India"
+    ]
 
-    parser = ConstitutionParser()
+    if m.get("part_no"):
+        parts.append(
+            f"Part {m['part_no']}"
+        )
 
-    constitution = parser.parse(
-        text
+    if m.get("chapter_no"):
+        parts.append(
+            f"Chapter {m['chapter_no']}"
+        )
+
+    if m.get("article_no"):
+        parts.append(
+            f"Article {m['article_no']}"
+        )
+
+    if m.get("clause_no"):
+        parts.append(
+            f"Clause ({m['clause_no']})"
+        )
+
+    if m.get("sub_clause_no"):
+        parts.append(
+            f"SubClause ({m['sub_clause_no']})"
+        )
+
+    if m.get("roman_no"):
+        parts.append(
+            f"Roman ({m['roman_no']})"
+        )
+
+    parts.append("")
+    parts.append(
+        chunk.text
     )
-    chunker=LegalChunker()
-    chunks=chunker.chunk_constitution(constitution)
-    print(len(chunks))
-    print(
-        chunker.stats(chunks)
-    )
 
-    
+    return "\n".join(parts)
+
+
+
+
+def chunks_to_dicts(
+    chunks: List[LegalChunk]
+) -> List[dict]:
+
+    result = []
+
+    for chunk in chunks:
+
+        metadata = chunk.metadata
+
+        result.append(
+            {
+                "chunk_id":
+                    chunk.chunk_id,
+
+                "level":
+                    chunk.chunk_type,
+
+                "document":
+                    "constitution",
+
+                "part_no":
+                    metadata.get(
+                        "part_no"
+                    ),
+
+                "part_title":
+                    metadata.get(
+                        "part_title"
+                    ),
+
+                "chapter_no":
+                    metadata.get(
+                        "chapter_no"
+                    ),
+
+                "chapter_title":
+                    metadata.get(
+                        "chapter_title"
+                    ),
+
+                "article_no":
+                    metadata.get(
+                        "article_no"
+                    ),
+
+                "article_title":
+                    metadata.get(
+                        "article_title"
+                    ),
+
+                "clause_no":
+                    metadata.get(
+                        "clause_no"
+                    ),
+
+                "sub_clause_no":
+                    metadata.get(
+                        "sub_clause_no"
+                    ),
+
+                "roman_no":
+                    metadata.get(
+                        "roman_no"
+                    ),
+
+                "text":
+                    chunk.text,
+
+                "references":
+                    chunk.references,
+
+                "enriched_text":
+                    build_enriched_text(
+                        chunk
+                    )
+            }
+        )
+
+    return result

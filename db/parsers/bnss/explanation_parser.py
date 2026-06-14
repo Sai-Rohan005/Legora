@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import List, Optional
 
-from legal_models import Explanation
+from db.parsers.bnss.legal_models import Explanation
 
 
 class ExplanationParser:

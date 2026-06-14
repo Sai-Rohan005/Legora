@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import List
 
-from legal_models import Illustration
+from db.parsers.bsa.legal_models import Illustration
 
 
 class IllustrationParser:

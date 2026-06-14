@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import List
 
-from legal_models import Proviso
+from db.parsers.consitution.legal_models import Proviso
 
 
 class ProvisoParser:

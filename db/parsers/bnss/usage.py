@@ -2,16 +2,16 @@ from collections import Counter
 
 from cleaner import BNSSTextCleaner
 
-from bnss_parser import (
+from db.parsers.bnss.bnss_parser import (
     BNSSParser
 )
 
-from chunk_temp import (
+from db.parsers.bnss.chunker import (
     LegalChunker,
     chunks_to_dicts
 )
 
-from ingest import (
+from db.parsers.bnss.ingest import (
     LegalIngestionPipeline
 )
 

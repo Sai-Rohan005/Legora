@@ -174,7 +174,7 @@ class EmbeddingGenerator:
 if __name__ == "__main__":
 
     from constitution_parser import ConstitutionParser
-    from chunker_test import LegalChunker
+    from db.parsers.consitution.chunker import LegalChunker
 
     with open(
         "../../pdfs/constitution.txt",

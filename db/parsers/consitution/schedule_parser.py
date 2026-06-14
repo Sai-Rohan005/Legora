@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import List, Dict
 
-from legal_models import (
+from db.parsers.consitution.legal_models import (
     Schedule,
     ScheduleParagraph
 )

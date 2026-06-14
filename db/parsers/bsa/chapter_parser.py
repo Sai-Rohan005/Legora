@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import List, Dict
 
-from legal_models import Chapter
+from db.parsers.bsa.legal_models import Chapter
 
 
 class ChapterParser:

@@ -2,16 +2,16 @@ from collections import Counter
 
 from cleaner import BSATextCleaner
 
-from bsa_parser import (
+from db.parsers.bsa.bsa_parser import (
     BSAParser
 )
 
-from chunker import (
+from db.parsers.bsa.chunker import (
     LegalChunker,
     chunks_to_dicts
 )
 
-from ingest import (
+from db.parsers.bsa.ingest import (
     LegalIngestionPipeline
 )
 

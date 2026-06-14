@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 from typing import List
 
-from cleaner import BSATextCleaner
-from legal_models import Section
+from db.parsers.bsa.cleaner import BSATextCleaner
+from db.parsers.bsa.legal_models import Section
 
 
 class SectionParser:
