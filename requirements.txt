@@ -103,3 +103,4 @@ websockets==16.0
 xxhash
 yarl
 zstandard
+streamlit>=1.40.0
