@@ -3,6 +3,9 @@ from __future__ import annotations
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
     VectorParams,
     PointStruct
 )
@@ -149,6 +152,35 @@ class QdrantStore:
                 f"{min(end,total)}"
                 f"/{total}"
             )
+
+    def search_with_filter(
+        self,
+        query_vector,
+        document: str = None,
+        limit: int = 10
+    ):
+
+        q_filter = None
+
+        if document:
+
+            q_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="document",
+                        match=MatchValue(
+                            value=document
+                        )
+                    )
+                ]
+            )
+
+        return self.client.query_points(
+            collection_name=self.collection_name,
+            query=query_vector,
+            query_filter=q_filter,
+            limit=limit
+        )
 
     # =====================================================
     # SEARCH

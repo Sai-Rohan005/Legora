@@ -1,32 +1,19 @@
 from __future__ import annotations
-
 from db.neo4j_store import Neo4jStore
-
 
 
 class BNSGraphBuilder:
 
     DOCUMENT_ID = "BNS"
 
-    def __init__(
-        self,
-        store: Neo4jStore
-    ):
-
+    def __init__(self, store: Neo4jStore):
         self.store = store
-    
 
     # =====================================================
     # NODE FACTORY
     # =====================================================
 
-    def _props(
-        self,
-        node_id: str,
-        node_type: str,
-        **kwargs
-    ):
-
+    def _props(self, node_id: str, node_type: str, **kwargs):
         return {
             "id": node_id,
             "document": "BNS",
@@ -35,104 +22,70 @@ class BNSGraphBuilder:
         }
 
     # =====================================================
-    # BUILD
+    # BUILD ENTRY
     # =====================================================
 
-    def build(
-        self,
-        bns
-    ):
-
+    def build(self, bns):
         self._create_document()
 
-        if getattr(
-            bns,
-            "parts",
-            []
-        ):
-
-            self._build_parts(
-                bns
-            )
-
+        if getattr(bns, "parts", None):
+            self._build_parts(bns)
         else:
-
-            self._build_chapters(
-                bns.chapters,
-                self.DOCUMENT_ID
-            )
+            self._build_chapters(bns.chapters, self.DOCUMENT_ID)
 
     # =====================================================
     # DOCUMENT
     # =====================================================
 
-    def _create_document(
-        self
-    ):
-
+    def _create_document(self):
         self.store.merge_node(
-        label="Document",
-        node_id=self.DOCUMENT_ID,
-        properties=self._props(
-            self.DOCUMENT_ID,
-            "Document",
-            name="Bharatiya Nyaya Sanhita, 2023"
+            label="Document",
+            node_id=self.DOCUMENT_ID,
+            properties=self._props(
+                self.DOCUMENT_ID,
+                "Document",
+                name="Bharatiya Nyaya Sanhita, 2023"
+            )
         )
-    )
 
     # =====================================================
     # PARTS
     # =====================================================
 
-    def _build_parts(
-        self,
-        bns
-    ):
-
+    def _build_parts(self, bns):
         for part in bns.parts:
 
-            part_id = (
-                f"BNS-PART-{part.part_no}"
-            )
+            part_id = f"BNS-PART-{part.part_no}"
 
             self.store.merge_node(
-            label="Part",
-            node_id=part_id,
-            properties=self._props(
-                part_id,
-                "Part",
-                part_no=part.part_no,
-                title=part.title,
-                text=part.text
+                label="Part",
+                node_id=part_id,
+                properties=self._props(
+                    part_id,
+                    "Part",
+                    part_no=part.part_no,
+                    title=part.title,
+                    text=part.text
+                )
             )
-        )
 
+            # PARENT → CHILD
             self.store.merge_relationship(
                 self.DOCUMENT_ID,
                 part_id,
                 "HAS_PART"
             )
 
-            self._build_chapters(
-                part.chapters,
-                part_id
-            )
+            self._build_chapters(part.chapters, part_id)
 
     # =====================================================
     # CHAPTERS
     # =====================================================
 
-    def _build_chapters(
-        self,
-        chapters,
-        parent_id
-    ):
-
+    def _build_chapters(self, chapters, parent_id):
         for chapter in chapters:
 
-            chapter_id = (
-                f"BNS-CH-{chapter.chapter_no}"
-            )
+            chapter_id = f"BNS-CH-{chapter.chapter_no}"
 
             self.store.merge_node(
                 label="Chapter",
@@ -152,26 +105,16 @@ class BNSGraphBuilder:
                 "HAS_CHAPTER"
             )
 
-            self._build_sections(
-                chapter.sections,
-                chapter_id
-            )
+            self._build_sections(chapter.sections, chapter_id)
 
     # =====================================================
     # SECTIONS
     # =====================================================
 
-    def _build_sections(
-        self,
-        sections,
-        chapter_id
-    ):
-
+    def _build_sections(self, sections, chapter_id):
         for section in sections:
 
-            section_id = (
-                f"BNS-{section.section_no}"
-            )
+            section_id = f"BNS-{section.section_no}"
 
             self.store.merge_node(
                 label="Section",
@@ -186,51 +129,24 @@ class BNSGraphBuilder:
             )
 
             self.store.merge_relationship(
-                section_id,
                 chapter_id,
-                "BELONGS_TO"
+                section_id,
+                "HAS_SECTION"
             )
 
-            self._build_clauses(
-                section,
-                section_id
-            )
-
-            self._build_explanations(
-                section,
-                section_id
-            )
-
-            self._build_illustrations(
-                section,
-                section_id
-            )
-
-            self._build_references(
-                section,
-                section_id
-            )
+            self._build_clauses(section, section_id)
+            self._build_explanations(section, section_id)
+            self._build_illustrations(section, section_id)
+            self._build_references(section, section_id)
 
     # =====================================================
     # CLAUSES
     # =====================================================
 
-    def _build_clauses(
-        self,
-        section,
-        section_id
-    ):
+    def _build_clauses(self, section, section_id):
+        for clause in getattr(section, "clauses", []):
 
-        for clause in getattr(
-            section,
-            "clauses",
-            []
-        ):
-
-            clause_id = (
-                f"{section_id}"
-                f"({clause.clause_no})"
-            )
+            clause_id = f"{section_id}({clause.clause_no})"
 
             self.store.merge_node(
                 label="Clause",
@@ -244,36 +160,21 @@ class BNSGraphBuilder:
             )
 
             self.store.merge_relationship(
-                clause_id,
                 section_id,
-                "BELONGS_TO"
+                clause_id,
+                "HAS_CLAUSE"
             )
 
-            self._build_subclauses(
-                clause,
-                clause_id
-            )
+            self._build_subclauses(clause, clause_id)
 
     # =====================================================
-    # SUB CLAUSES
+    # SUBCLAUSES
     # =====================================================
 
-    def _build_subclauses(
-        self,
-        clause,
-        clause_id
-    ):
+    def _build_subclauses(self, clause, clause_id):
+        for sub in getattr(clause, "sub_clauses", []):
 
-        for sub in getattr(
-            clause,
-            "sub_clauses",
-            []
-        ):
-
-            sub_id = (
-                f"{clause_id}"
-                f"({sub.sub_clause_no})"
-            )
+            sub_id = f"{clause_id}({sub.sub_clause_no})"
 
             self.store.merge_node(
                 label="SubClause",
@@ -287,36 +188,21 @@ class BNSGraphBuilder:
             )
 
             self.store.merge_relationship(
-                sub_id,
                 clause_id,
-                "BELONGS_TO"
+                sub_id,
+                "HAS_SUBCLAUSE"
             )
 
-            self._build_roman_clauses(
-                sub,
-                sub_id
-            )
+            self._build_roman_clauses(sub, sub_id)
 
     # =====================================================
     # ROMAN CLAUSES
     # =====================================================
 
-    def _build_roman_clauses(
-        self,
-        sub,
-        sub_id
-    ):
+    def _build_roman_clauses(self, sub, sub_id):
+        for roman in getattr(sub, "roman_clauses", []):
 
-        for roman in getattr(
-            sub,
-            "roman_clauses",
-            []
-        ):
-
-            roman_id = (
-                f"{sub_id}"
-                f"({roman.roman_no})"
-            )
+            roman_id = f"{sub_id}({roman.roman_no})"
 
             self.store.merge_node(
                 label="RomanClause",
@@ -330,34 +216,19 @@ class BNSGraphBuilder:
             )
 
             self.store.merge_relationship(
-                roman_id,
                 sub_id,
-                "BELONGS_TO"
+                roman_id,
+                "HAS_ROMANCLAUSE"
             )
 
     # =====================================================
     # EXPLANATIONS
     # =====================================================
 
-    def _build_explanations(
-        self,
-        section,
-        section_id
-    ):
+    def _build_explanations(self, section, section_id):
+        for idx, explanation in enumerate(getattr(section, "explanations", []), start=1):
 
-        for idx, explanation in enumerate(
-            getattr(
-                section,
-                "explanations",
-                []
-            ),
-            start=1
-        ):
-
-            explanation_id = (
-                f"{section_id}"
-                f"-EXPL-{idx}"
-            )
+            explanation_id = f"{section_id}-EXPL-{idx}"
 
             self.store.merge_node(
                 label="Explanation",
@@ -370,34 +241,19 @@ class BNSGraphBuilder:
             )
 
             self.store.merge_relationship(
-                explanation_id,
                 section_id,
-                "BELONGS_TO"
+                explanation_id,
+                "HAS_EXPLANATION"
             )
 
     # =====================================================
     # ILLUSTRATIONS
     # =====================================================
 
-    def _build_illustrations(
-        self,
-        section,
-        section_id
-    ):
+    def _build_illustrations(self, section, section_id):
+        for idx, illustration in enumerate(getattr(section, "illustrations", []), start=1):
 
-        for idx, illustration in enumerate(
-            getattr(
-                section,
-                "illustrations",
-                []
-            ),
-            start=1
-        ):
-
-            illustration_id = (
-                f"{section_id}"
-                f"-ILL-{idx}"
-            )
+            illustration_id = f"{section_id}-ILL-{idx}"
 
             self.store.merge_node(
                 label="Illustration",
@@ -405,49 +261,29 @@ class BNSGraphBuilder:
                 properties=self._props(
                     illustration_id,
                     "Illustration",
-                    illustration_no=getattr(
-                        illustration,
-                        "illustration_no",
-                        None
-                    ),
+                    illustration_no=getattr(illustration, "illustration_no", None),
                     text=illustration.text
                 )
             )
 
             self.store.merge_relationship(
-                illustration_id,
                 section_id,
-                "BELONGS_TO"
+                illustration_id,
+                "HAS_ILLUSTRATION"
             )
 
     # =====================================================
     # REFERENCES
     # =====================================================
 
-    def _build_references(
-        self,
-        section,
-        section_id
-    ):
+    def _build_references(self, section, section_id):
+        for ref in getattr(section, "references", []):
 
-        for ref in getattr(
-            section,
-            "references",
-            []
-        ):
-
-            target_section = getattr(
-                ref,
-                "section_no",
-                None
-            )
-
+            target_section = getattr(ref, "section_no", None)
             if not target_section:
                 continue
 
-            target_id = (
-                f"BNS-{target_section}"
-            )
+            target_id = f"BNS-{target_section}"
 
             self.store.merge_relationship(
                 section_id,

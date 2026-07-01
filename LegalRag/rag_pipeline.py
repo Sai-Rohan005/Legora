@@ -1,6 +1,9 @@
 from retrival.usage import LegalRetriever
 from LLM.llm import LegalLLM
+import os
+import dotenv
 
+dotenv.load_dotenv()
 
 class RAGPipeline:
 
@@ -8,7 +11,7 @@ class RAGPipeline:
 
         self.retriever = LegalRetriever()
 
-        self.llm = LegalLLM()
+        self.llm = LegalLLM(api_key=os.getenv("GEMINI_API_KEY"))
 
     # =====================================================
     # CONTEXT
@@ -60,6 +63,9 @@ class RAGPipeline:
         context = retrieval_result[
             "final_context"
         ]
+        print("=" * 100)
+        print(retrieval_result["final_context"])
+        print("=" * 100)
 
         answer = (
             self.get_llm_result(

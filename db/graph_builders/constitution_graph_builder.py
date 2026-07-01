@@ -7,22 +7,14 @@ class ConstitutionGraphBuilder:
 
     DOCUMENT_ID = "CONST"
 
-    def __init__(
-        self,
-        store: Neo4jStore
-    ):
+    def __init__(self, store: Neo4jStore):
         self.store = store
 
     # =====================================================
     # NODE FACTORY
     # =====================================================
 
-    def _props(
-        self,
-        node_id: str,
-        node_type: str,
-        **kwargs
-    ):
+    def _props(self, node_id: str, node_type: str, **kwargs):
         return {
             "id": node_id,
             "document": "CONSTITUTION",
@@ -31,31 +23,21 @@ class ConstitutionGraphBuilder:
         }
 
     # =====================================================
-    # BUILD
+    # BUILD ENTRY
     # =====================================================
 
-    def build(
-        self,
-        constitution
-    ):
+    def build(self, constitution):
 
         self._create_document_node()
 
-        self._build_parts(
-            constitution
-        )
-
-        self._build_schedules(
-            constitution
-        )
+        self._build_parts(constitution)
+        self._build_schedules(constitution)
 
     # =====================================================
-    # DOCUMENT
+    # DOCUMENT NODE
     # =====================================================
 
-    def _create_document_node(
-        self
-    ):
+    def _create_document_node(self):
 
         self.store.merge_node(
             label="Document",
@@ -71,16 +53,11 @@ class ConstitutionGraphBuilder:
     # PARTS
     # =====================================================
 
-    def _build_parts(
-        self,
-        constitution
-    ):
+    def _build_parts(self, constitution):
 
         for part in constitution.parts:
 
-            part_id = (
-                f"CONST-PART-{part.part_no}"
-            )
+            part_id = f"CONST-PART-{part.part_no}"
 
             self.store.merge_node(
                 label="Part",
@@ -93,69 +70,28 @@ class ConstitutionGraphBuilder:
                 )
             )
 
-        
-
+            # Part → Document
             self.store.merge_relationship(
                 part_id,
                 self.DOCUMENT_ID,
                 "BELONGS_TO"
             )
 
-            # Articles directly under Part
-
-            for article in getattr(
-                part,
-                "articles",
-                []
-            ):
-
-                article_id = (
-                    self._build_article(
-                        article,
-                        part_id
-                    )
-                )
-
-                self.store.merge_relationship(
-                    part_id,
-                    article_id,
-                    "HAS_ARTICLE"
-                )
-
             # Chapters
+            for chapter in getattr(part, "chapters", []):
+                self._build_chapter(chapter, part_id)
 
-            for chapter in getattr(
-                part,
-                "chapters",
-                []
-            ):
-
-                chapter_id = (
-                    self._build_chapter(
-                        chapter,
-                        part_id
-                    )
-                )
-
-                self.store.merge_relationship(
-                    part_id,
-                    chapter_id,
-                    "HAS_CHAPTER"
-                )
+            # Articles directly under part
+            for article in getattr(part, "articles", []):
+                self._build_article(article, part_id)
 
     # =====================================================
     # CHAPTER
     # =====================================================
 
-    def _build_chapter(
-        self,
-        chapter,
-        parent_id
-    ):
+    def _build_chapter(self, chapter, parent_id):
 
-        chapter_id = (
-            f"CONST-CH-{chapter.chapter_no}"
-        )
+        chapter_id = f"CONST-CH-{chapter.chapter_no}"
 
         self.store.merge_node(
             label="Chapter",
@@ -164,35 +100,20 @@ class ConstitutionGraphBuilder:
                 chapter_id,
                 "Chapter",
                 chapter_no=chapter.chapter_no,
-                title=chapter.chapter_title,
-                # text=chapter.text
+                title=chapter.chapter_title
             )
         )
 
+        # Chapter → Part
         self.store.merge_relationship(
             chapter_id,
             parent_id,
             "BELONGS_TO"
         )
 
-        for article in getattr(
-            chapter,
-            "articles",
-            []
-        ):
-
-            article_id = (
-                self._build_article(
-                    article,
-                    chapter_id
-                )
-            )
-
-            self.store.merge_relationship(
-                chapter_id,
-                article_id,
-                "HAS_ARTICLE"
-            )
+        # Articles
+        for article in getattr(chapter, "articles", []):
+            self._build_article(article, chapter_id)
 
         return chapter_id
 
@@ -200,15 +121,9 @@ class ConstitutionGraphBuilder:
     # ARTICLE
     # =====================================================
 
-    def _build_article(
-        self,
-        article,
-        parent_id
-    ):
+    def _build_article(self, article, parent_id):
 
-        article_id = (
-            f"CONST-{article.article_no}"
-        )
+        article_id = f"CONST-{article.article_no}"
 
         self.store.merge_node(
             label="Article",
@@ -222,6 +137,7 @@ class ConstitutionGraphBuilder:
             )
         )
 
+        # Article → Parent (Chapter or Part)
         self.store.merge_relationship(
             article_id,
             parent_id,
@@ -229,40 +145,13 @@ class ConstitutionGraphBuilder:
         )
 
         # Clauses
-
-        for clause in getattr(
-            article,
-            "clauses",
-            []
-        ):
-
-            clause_id = (
-                self._build_clause(
-                    clause,
-                    article_id
-                )
-            )
-
-            self.store.merge_relationship(
-                article_id,
-                clause_id,
-                "HAS_CLAUSE"
-            )
+        for clause in getattr(article, "clauses", []):
+            self._build_clause(clause, article_id)
 
         # Provisos
+        for idx, proviso in enumerate(getattr(article, "provisos", []), start=1):
 
-        for idx, proviso in enumerate(
-            getattr(
-                article,
-                "provisos",
-                []
-            ),
-            start=1
-        ):
-
-            proviso_id = (
-                f"{article_id}-PROVISO-{idx}"
-            )
+            proviso_id = f"{article_id}-PROVISO-{idx}"
 
             self.store.merge_node(
                 label="Proviso",
@@ -274,8 +163,6 @@ class ConstitutionGraphBuilder:
                 )
             )
 
-            
-
             self.store.merge_relationship(
                 proviso_id,
                 article_id,
@@ -283,19 +170,9 @@ class ConstitutionGraphBuilder:
             )
 
         # Explanations
+        for idx, explanation in enumerate(getattr(article, "explanations", []), start=1):
 
-        for idx, explanation in enumerate(
-            getattr(
-                article,
-                "explanations",
-                []
-            ),
-            start=1
-        ):
-
-            explanation_id = (
-                f"{article_id}-EXPL-{idx}"
-            )
+            explanation_id = f"{article_id}-EXPL-{idx}"
 
             self.store.merge_node(
                 label="Explanation",
@@ -307,35 +184,24 @@ class ConstitutionGraphBuilder:
                 )
             )
 
-            
-
             self.store.merge_relationship(
                 explanation_id,
                 article_id,
                 "BELONGS_TO"
             )
 
-        self._build_references(
-            article,
-            article_id
-        )
+        # References
+        self._build_references(article, article_id)
 
         return article_id
 
     # =====================================================
-    # CLAUSE
+    # CLAUSE TREE
     # =====================================================
 
-    def _build_clause(
-        self,
-        clause,
-        article_id
-    ):
+    def _build_clause(self, clause, article_id):
 
-        clause_id = (
-            f"{article_id}"
-            f"({clause.clause_no})"
-        )
+        clause_id = f"{article_id}({clause.clause_no})"
 
         self.store.merge_node(
             label="Clause",
@@ -354,16 +220,8 @@ class ConstitutionGraphBuilder:
             "BELONGS_TO"
         )
 
-        for sub in getattr(
-            clause,
-            "sub_clauses",
-            []
-        ):
-
-            sub_id = (
-                f"{clause_id}"
-                f"({sub.sub_clause_no})"
-            )
+        for sub in getattr(clause, "sub_clauses", []):
+            sub_id = f"{clause_id}({sub.sub_clause_no})"
 
             self.store.merge_node(
                 label="SubClause",
@@ -375,8 +233,6 @@ class ConstitutionGraphBuilder:
                     text=sub.text
                 )
             )
-
-            
 
             self.store.merge_relationship(
                 sub_id,
@@ -390,30 +246,16 @@ class ConstitutionGraphBuilder:
     # REFERENCES
     # =====================================================
 
-    def _build_references(
-        self,
-        article,
-        article_id
-    ):
+    def _build_references(self, article, article_id):
 
-        for ref in getattr(
-            article,
-            "references",
-            []
-        ):
+        for ref in getattr(article, "references", []):
 
-            target_article = getattr(
-                ref,
-                "article_no",
-                None
-            )
+            target = getattr(ref, "article_no", None)
 
-            if not target_article:
+            if not target:
                 continue
 
-            target_id = (
-                f"CONST-{target_article}"
-            )
+            target_id = f"CONST-{target}"
 
             self.store.merge_relationship(
                 article_id,
@@ -425,20 +267,11 @@ class ConstitutionGraphBuilder:
     # SCHEDULES
     # =====================================================
 
-    def _build_schedules(
-        self,
-        constitution
-    ):
+    def _build_schedules(self, constitution):
 
-        for schedule in getattr(
-            constitution,
-            "schedules",
-            []
-        ):
+        for schedule in getattr(constitution, "schedules", []):
 
-            schedule_id = (
-                f"CONST-SCH-{schedule.schedule_no}"
-            )
+            schedule_id = f"CONST-SCH-{schedule.schedule_no}"
 
             self.store.merge_node(
                 label="Schedule",
@@ -451,8 +284,6 @@ class ConstitutionGraphBuilder:
                     text=schedule.text
                 )
             )
-
-            
 
             self.store.merge_relationship(
                 schedule_id,

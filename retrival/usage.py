@@ -165,3 +165,8 @@ References:
             "final_context":
                 final_context
         }
+
+if __name__=="__main__":
+    query="My bike was stolen from outside my house. What punishment can the offender face?"
+    retriver=LegalRetriever()
+    print(retriver.retrieve(query))

@@ -98,52 +98,26 @@ class KanoonClient:
         return response.json()
     
 
-    def retrieve(
-        self,
-        query: str,
-        top_k: int = 5
-    ):
-        
-        
-        kanoon_query=self.rewriter.rewrite(query) or query
+    def retrieve(self, query: str, top_k: int = 5):
 
-        search_results = (
-            self.kanoon.search(
-                kanoon_query
-            )
-        )
+        kanoon_query = self.rewriter.rewrite(query) or query
+
+        search_results = self.search(kanoon_query)
 
         judgments = []
 
-        for doc in search_results[
-            "docs"
-        ][:top_k]:
-            
-            doc_id = (
-                doc.get("tid")
-                or doc.get("id")
-            )
+        for doc in search_results.get("docs", [])[:top_k]:
+
+            doc_id = doc.get("tid") or doc.get("id")
 
             if not doc_id:
                 continue
 
             try:
-
-                full_doc = (
-                    self.get_document(
-                        doc_id
-                    )
-                )
-
-                judgments.append(
-                    full_doc
-                )
+                full_doc = self.get_document(doc_id)
+                judgments.append(full_doc)
 
             except Exception as e:
-
-                print(
-                    f"Failed to fetch "
-                    f"{doc_id}: {e}"
-                )
+                print(f"Failed to fetch {doc_id}: {e}")
 
         return judgments
