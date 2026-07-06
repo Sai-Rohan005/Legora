@@ -35,6 +35,7 @@ class QdrantStore:
                 api_key=qdrant_api_key,
                 check_compatibility=False
             )
+            self.client.delete_collection(collection_name="legal_rag")
         else:
             self.client = QdrantClient(
                 host="localhost",
@@ -120,7 +121,7 @@ class QdrantStore:
     def upsert_points(
         self,
         points: list[dict],
-        batch_size: int = 500
+        batch_size: int = 8
     ):
 
         total = len(points)

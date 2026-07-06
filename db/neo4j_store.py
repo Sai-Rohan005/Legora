@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from neo4j import GraphDatabase
 import os
-
+import dotenv
+dotenv.load_dotenv()
 class Neo4jStore:
 
     def __init__(
@@ -15,6 +16,9 @@ class Neo4jStore:
         uri = os.getenv("NEO4J_URI")
         username = os.getenv("NEO4J_USERNAME")
         password = os.getenv("NEO4J_PASSWORD")
+        print("URI:", repr(uri))
+        print("USERNAME:", repr(username))
+        print("PASSWORD SET:", password is not None)
 
         self.driver = GraphDatabase.driver(
             uri,
