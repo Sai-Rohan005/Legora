@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from neo4j import GraphDatabase
-
+import os
 
 class Neo4jStore:
 
@@ -11,6 +11,10 @@ class Neo4jStore:
         username: str = "neo4j",
         password: str = "test12345"
     ):
+        
+        uri = os.getenv("NEO4J_URI")
+        username = os.getenv("NEO4J_USERNAME")
+        password = os.getenv("NEO4J_PASSWORD")
 
         self.driver = GraphDatabase.driver(
             uri,

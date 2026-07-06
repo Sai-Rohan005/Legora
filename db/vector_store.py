@@ -9,6 +9,8 @@ from qdrant_client.models import (
     VectorParams,
     PointStruct
 )
+import os
+
 
 
 class QdrantStore:
@@ -19,17 +21,25 @@ class QdrantStore:
         host: str = "localhost",
         port: int = 6333
     ):
+        qdrant_url = os.getenv("QDRANT_URL")
+        qdrant_api_key = os.getenv("QDRANT_API_KEY")
+
 
         self.collection_name = (
             collection_name
         )
 
-        self.client = (
-            QdrantClient(
-                host=host,
-                port=port
+        if qdrant_url:
+            self.client = QdrantClient(
+                url=qdrant_url,
+                api_key=qdrant_api_key,
+                check_compatibility=False
             )
-        )
+        else:
+            self.client = QdrantClient(
+                host="localhost",
+                port=6333
+            )
 
     # =====================================================
     # COLLECTION EXISTS
