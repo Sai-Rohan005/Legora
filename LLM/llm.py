@@ -10,12 +10,8 @@ class LegalLLM:
         api_key: str,
         model: str = "gemini-2.5-flash-lite"
     ):
-
         self.model = model
-
-        self.client = genai.Client(
-            api_key=api_key
-        )
+        self.client = genai.Client(api_key=api_key)
 
     # =====================================================
     # GENERATE
@@ -24,9 +20,21 @@ class LegalLLM:
     def generate(
         self,
         query: str,
-        context: str
-    ):
-
+        context: str,
+        **kwargs
+    ) -> str:
+        """
+        Generate a legal answer using the provided context.
+        
+        Args:
+            query: User's legal question.
+            context: Retrieved legal context (statutes, judgments, graph).
+            **kwargs: Additional generation parameters (temperature, max_tokens, etc.)
+                     passed directly to the Gemini API.
+        
+        Returns:
+            The generated answer as a string.
+        """
         prompt = f"""
 You are an expert Indian Legal Assistant.
 
@@ -47,11 +55,26 @@ Legal Context:
 Answer:
 """
 
-        response = (
-            self.client.models.generate_content(
-                model=self.model,
-                contents=prompt
-            )
+        # Prepare generation config from kwargs
+        # Allowed parameters: temperature, max_tokens, top_p, top_k, etc.
+        # We'll pass them as keyword arguments to generate_content.
+        # Gemini's generate_content accepts a 'config' parameter with these.
+        # We'll build a config dict from kwargs.
+        config = {}
+        if "temperature" in kwargs:
+            config["temperature"] = kwargs["temperature"]
+        if "max_tokens" in kwargs:
+            config["max_output_tokens"] = kwargs["max_tokens"]
+        if "top_p" in kwargs:
+            config["top_p"] = kwargs["top_p"]
+        if "top_k" in kwargs:
+            config["top_k"] = kwargs["top_k"]
+        # Add any other supported parameters as needed
+
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=config if config else None  # only pass config if non-empty
         )
 
         return response.text

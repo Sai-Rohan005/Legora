@@ -35,7 +35,7 @@ class QdrantStore:
                 api_key=qdrant_api_key,
                 check_compatibility=False
             )
-            self.client.delete_collection(collection_name="legal_rag")
+            # self.client.delete_collection(collection_name="legal_rag")
         else:
             self.client = QdrantClient(
                 host="localhost",

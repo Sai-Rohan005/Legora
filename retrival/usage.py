@@ -7,9 +7,7 @@ from retrival.judgments import KanoonClient
 class LegalRetriever:
 
     def __init__(self):
-
         self.hybrid = HybridRetriever()
-
         self.kanoon = KanoonClient()
 
     # =====================================================
@@ -19,24 +17,23 @@ class LegalRetriever:
     def build_context(
         self,
         hybrid_result,
-        judgments
+        judgments,
+        include_full_docs: bool = False
     ):
-
         context = []
 
         # -----------------------------------------
         # Statutory Retrieval
         # -----------------------------------------
+        context.append("===== STATUTORY LAW =====\n")
 
-        context.append(
-            "===== STATUTORY LAW =====\n"
-        )
-
-        for point in hybrid_result[
-            "reranked_results"
-        ]:
-
+        for point in hybrid_result["reranked_results"]:
             payload = point.payload
+
+            if include_full_docs:
+                doc_text = payload.get('document', '')
+            else:
+                doc_text = payload.get('text', '')
 
             context.append(
                 f"""
@@ -47,28 +44,16 @@ CHUNK:
 {payload.get('chunk_id')}
 
 TEXT:
-{payload.get('text')}
+{doc_text}
 """
             )
 
         # -----------------------------------------
         # Graph Expansion
         # -----------------------------------------
-
-        context.append(
-            "\n===== KNOWLEDGE GRAPH =====\n"
-        )
-
-        for node_id, graph_data in (
-            hybrid_result[
-                "graph_context"
-            ].items()
-        ):
-
-            context.append(
-                f"\nNODE: {node_id}"
-            )
-
+        context.append("\n===== KNOWLEDGE GRAPH =====\n")
+        for node_id, graph_data in hybrid_result["graph_context"].items():
+            context.append(f"\nNODE: {node_id}")
             context.append(
                 f"""
 Ancestors:
@@ -85,16 +70,9 @@ References:
         # -----------------------------------------
         # Judgments
         # -----------------------------------------
-
-        context.append(
-            "\n===== JUDGMENTS =====\n"
-        )
-
+        context.append("\n===== JUDGMENTS =====\n")
         for judgment in judgments:
-
-            context.append(
-                str(judgment)
-            )
+            context.append(str(judgment))
 
         return "\n".join(context)
 
@@ -105,68 +83,48 @@ References:
     def retrieve(
         self,
         query: str,
-        vector_k: int = 30,
-        rerank_k: int = 5,
-        judgment_k: int = 5
+        **kwargs
     ):
+        # Extract known parameters with defaults
+        vector_k = kwargs.get('vector_k', 30)
+        rerank_k = kwargs.get('rerank_k', 5)
+        judgment_k = kwargs.get('judgment_k', 5)
+        include_full_docs = kwargs.get('include_full_docs', False)
 
-        # -----------------------------------------
-        # Hybrid Retrieval
-        # -----------------------------------------
+        # Allow 'top_k' as alias for vector_k
+        if 'top_k' in kwargs:
+            vector_k = kwargs['top_k']
 
-        hybrid_result = (
-            self.hybrid.retrieve(
-                query=query,
-                vector_k=vector_k,
-                rerank_k=rerank_k
-            )
+        # Pass through extra kwargs to underlying retrievers
+        hybrid_result = self.hybrid.retrieve(
+            query=query,
+            vector_k=vector_k,
+            rerank_k=rerank_k,
+            **kwargs
         )
 
-        # -----------------------------------------
-        # Kanoon Retrieval
-        # -----------------------------------------
-
-        judgments = (
-            self.kanoon.retrieve(
-                query=query,
-                top_k=judgment_k
-            )
+        judgments = self.kanoon.retrieve(
+            query=query,
+            top_k=judgment_k,
+            **kwargs
         )
 
-        # -----------------------------------------
-        # Final Context
-        # -----------------------------------------
-
-        final_context = (
-            self.build_context(
-                hybrid_result,
-                judgments
-            )
+        final_context = self.build_context(
+            hybrid_result,
+            judgments,
+            include_full_docs=include_full_docs
         )
 
         return {
-
-            "query":
-                query,
-
-            "statutory_results":
-                hybrid_result[
-                    "reranked_results"
-                ],
-
-            "graph_context":
-                hybrid_result[
-                    "graph_context"
-                ],
-
-            "judgments":
-                judgments,
-
-            "final_context":
-                final_context
+            "query": query,
+            "statutory_results": hybrid_result["reranked_results"],
+            "graph_context": hybrid_result["graph_context"],
+            "judgments": judgments,
+            "final_context": final_context
         }
 
-if __name__=="__main__":
-    query="My bike was stolen from outside my house. What punishment can the offender face?"
-    retriver=LegalRetriever()
-    print(retriver.retrieve(query))
+
+if __name__ == "__main__":
+    query = "My bike was stolen from outside my house. What punishment can the offender face?"
+    retriever = LegalRetriever()
+    print(retriever.retrieve(query))
