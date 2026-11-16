@@ -1,9 +1,6 @@
 import requests
 import logging
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
+from legora.config import get_settings
 
 from google import genai
 
@@ -15,6 +12,7 @@ class LegalQueryRewriter:
 
     def __init__(self, api_key):
 
+        self.model = get_settings().gemini_model
         self.client = genai.Client(
             api_key=api_key
         )
@@ -41,7 +39,7 @@ Question:
 
         response = (
             self.client.models.generate_content(
-                model="gemini-2.5-flash-lite",
+                model=self.model,
                 contents=prompt
             )
         )
@@ -53,9 +51,8 @@ class KanoonClient:
 
     def __init__(self):
 
-        self.token = os.getenv(
-            "kanoon_token"
-        )
+        settings = get_settings()
+        self.token = settings.kanoon_token.get_secret_value()
 
         self.headers = {
             "Authorization":
@@ -63,7 +60,7 @@ class KanoonClient:
         }
 
         self.rewriter = LegalQueryRewriter(
-            api_key=os.getenv("GEMINI_API_KEY")
+            api_key=settings.gemini_api_key.get_secret_value()
         )  
 
     def search(
@@ -102,7 +99,8 @@ class KanoonClient:
         return response.json()
     
 
-    def retrieve(self, query: str, top_k: int = 5):
+    def retrieve(self, query: str, top_k: int | None = None):
+        top_k = top_k if top_k is not None else get_settings().judgment_k
 
         kanoon_query = self.rewriter.rewrite(query) or query
 

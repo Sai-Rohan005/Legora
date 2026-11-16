@@ -5,6 +5,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from legora.config import Settings, get_settings
 from LegalRag.rag_pipeline import RAGPipeline
 from db.graph_builders.bns_graph_builder import BNSGraphBuilder
 from db.neo4j_store import Neo4jStore
@@ -12,7 +13,35 @@ from retrieval.hybrid_retrieval import HybridRetriever
 from retrieval.usage import LegalRetriever
 
 
-class RetryTests(unittest.TestCase):
+TEST_ENV = {
+    "GEMINI_API_KEY": "example-gemini-key",
+    "QDRANT_URL": "http://example.invalid:6333",
+    "NEO4J_URI": "neo4j://example.invalid",
+    "NEO4J_USERNAME": "example-user",
+    "NEO4J_PASSWORD": "example-secret",
+    "KANOON_TOKEN": "example-kanoon-token",
+}
+
+
+class ConfiguredTestCase(unittest.TestCase):
+    """Isolate tests from the developer's .env file and settings cache."""
+
+    def setUp(self) -> None:
+        """Supply explicit test settings without reading real credentials."""
+        env = patch.dict(os.environ, TEST_ENV, clear=True)
+        env.start()
+        self.addCleanup(env.stop)
+        source = patch.dict(Settings.model_config, {"env_file": None})
+        source.start()
+        self.addCleanup(source.stop)
+        get_settings.cache_clear()
+        self.addCleanup(get_settings.cache_clear)
+        logging_setup = patch("LegalRag.rag_pipeline.setup_logging")
+        logging_setup.start()
+        self.addCleanup(logging_setup.stop)
+
+
+class RetryTests(ConfiguredTestCase):
     """Check the budget across failure stages and repeated searches."""
 
     def make_pipeline(self, budget: int, stage: str) -> RAGPipeline:
@@ -77,7 +106,7 @@ class RetryTests(unittest.TestCase):
         self.assertNotIn("private query marker", " ".join(logs.output))
 
 
-class ConfigurationTests(unittest.TestCase):
+class ConfigurationTests(ConfiguredTestCase):
     """Validate environment-only graph configuration without connecting."""
 
     def test_missing_configuration_fails_before_driver_creation(self) -> None:
@@ -85,7 +114,8 @@ class ConfigurationTests(unittest.TestCase):
         config = {"NEO4J_URI": "neo4j://example.invalid", "NEO4J_USERNAME": "example-user", "NEO4J_PASSWORD": "example-secret"}
         for name in config:
             for value in (None, "", "   "):
-                env = dict(config)
+                get_settings.cache_clear()
+                env = dict(TEST_ENV)
                 if value is None:
                     env.pop(name)
                 else:
@@ -98,7 +128,7 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_driver_uses_environment(self) -> None:
         """Pass configured values unchanged to the Neo4j driver."""
-        with patch.dict(os.environ, {"NEO4J_URI": "neo4j://example.invalid", "NEO4J_USERNAME": "example-user", "NEO4J_PASSWORD": "example-secret"}, clear=True), patch("db.neo4j_store.GraphDatabase.driver") as driver:
+        with patch.dict(os.environ, TEST_ENV, clear=True), patch("db.neo4j_store.GraphDatabase.driver") as driver:
             Neo4jStore()
         driver.assert_called_once_with("neo4j://example.invalid", auth=("example-user", "example-secret"))
 
@@ -151,7 +181,7 @@ class GraphTests(unittest.TestCase):
         self.assertEqual((params["source_id"], params["target_id"]), ("child", "parent"))
 
 
-class RetryForwardingTests(unittest.TestCase):
+class RetryForwardingTests(ConfiguredTestCase):
     """Exercise real orchestration with the downstream signatures enforced."""
 
     def test_retry_options_are_not_forwarded_to_incompatible_clients(self) -> None:

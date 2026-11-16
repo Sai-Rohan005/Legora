@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 from google import genai
+from legora.config import get_settings
 
 
 class LegalLLM:
 
     def __init__(
         self,
-        api_key: str,
-        model: str = "gemini-2.5-flash-lite"
+        api_key: str | None = None,
+        model: str | None = None
     ):
-        self.model = model
-        self.client = genai.Client(api_key=api_key)
+        settings = get_settings()
+        self.model = model or settings.gemini_model
+        self.client = genai.Client(
+            api_key=api_key or settings.gemini_api_key.get_secret_value()
+        )
 
     # =====================================================
     # GENERATE

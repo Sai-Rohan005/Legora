@@ -11,7 +11,7 @@ from qdrant_client.models import (
     VectorParams,
     PointStruct
 )
-import os
+from legora.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,30 +21,15 @@ class QdrantStore:
 
     def __init__(
         self,
-        collection_name: str = "legal_rag",
-        host: str = "localhost",
-        port: int = 6333
+        collection_name: str = "legal_rag"
     ):
-        qdrant_url = os.getenv("QDRANT_URL")
-        qdrant_api_key = os.getenv("QDRANT_API_KEY")
-
-
-        self.collection_name = (
-            collection_name
+        config = get_settings()
+        self.collection_name = collection_name
+        self.client = QdrantClient(
+            url=config.qdrant_url,
+            api_key=config.qdrant_api_key.get_secret_value() if config.qdrant_api_key else None,
+            check_compatibility=False
         )
-
-        if qdrant_url:
-            self.client = QdrantClient(
-                url=qdrant_url,
-                api_key=qdrant_api_key,
-                check_compatibility=False
-            )
-            # self.client.delete_collection(collection_name="legal_rag")
-        else:
-            self.client = QdrantClient(
-                host="localhost",
-                port=6333
-            )
 
     # =====================================================
     # COLLECTION EXISTS

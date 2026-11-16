@@ -2,16 +2,10 @@ import logging
 from google import genai
 from pydantic import BaseModel
 from typing import List, Optional
-import os
-import dotenv
+from legora.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-dotenv.load_dotenv()
-
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
 
 class LegalQueryAnalysis(BaseModel):
     query_type: str
@@ -25,7 +19,11 @@ class LegalQueryAnalysis(BaseModel):
 
 class Analyser:
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Create the analyser with the shared Gemini configuration."""
+        settings = get_settings()
+        self.model = settings.gemini_model
+        self.client = genai.Client(api_key=settings.gemini_api_key.get_secret_value())
         self.SYSTEM_PROMPT = """
         You are an expert Indian legal query analyzer.
 
@@ -72,8 +70,8 @@ class Analyser:
 
     def analyze_query(self,query: str) -> LegalQueryAnalysis:
 
-        response = client.models.generate_content(
-            model=os.getenv("Gemini_MODEL"),
+        response = self.client.models.generate_content(
+            model=self.model,
             contents=f"""
         {self.SYSTEM_PROMPT}
 

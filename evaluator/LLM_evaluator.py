@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import logging
 
-import os
 import json
 import re
 from typing import Any, Dict, List, Optional
 
 from google import genai
 from google.genai import types
-from dotenv import load_dotenv
+from legora.config import get_settings
 
 logger = logging.getLogger(__name__)
-load_dotenv()
 
 class LegalLLMEvaluator:
 
@@ -44,24 +42,17 @@ class LegalLLMEvaluator:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "gemini-2.5-flash"
+        model: Optional[str] = None
     ):
 
-        self.api_key = (
-            api_key
-            or os.getenv("GEMINI_API_KEY")
-        )
-
-        if not self.api_key:
-            raise ValueError(
-                "GEMINI_API_KEY is not set."
-            )
+        settings = get_settings()
+        self.api_key = api_key or settings.gemini_api_key.get_secret_value()
 
         self.client = genai.Client(
             api_key=self.api_key
         )
 
-        self.model = model
+        self.model = model or settings.gemini_model
 
     # ============================================================
     # MAIN EVALUATION

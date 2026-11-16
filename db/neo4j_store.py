@@ -4,26 +4,17 @@ import logging
 from builtins import str
 
 from neo4j import GraphDatabase
-import os
-import dotenv
+from legora.config import get_settings
 
 logger = logging.getLogger(__name__)
-dotenv.load_dotenv()
 class Neo4jStore:
 
     def __init__(self) -> None:
         """Create a driver from required NEO4J_* environment variables."""
-        names = ("NEO4J_URI", "NEO4J_USERNAME", "NEO4J_PASSWORD")
-        config = {name: os.getenv(name) for name in names}
-        missing = [name for name, value in config.items() if not value or not value.strip()]
-        if missing:
-            raise ValueError(
-                "Missing required Neo4j environment variables: " + ", ".join(missing)
-            )
-
+        config = get_settings()
         self.driver = GraphDatabase.driver(
-            config["NEO4J_URI"],
-            auth=(config["NEO4J_USERNAME"], config["NEO4J_PASSWORD"])
+            config.neo4j_uri,
+            auth=(config.neo4j_username, config.neo4j_password.get_secret_value())
         )
 
     # =====================================================

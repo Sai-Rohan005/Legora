@@ -2,24 +2,25 @@ from retrieval.usage import LegalRetriever
 from LLM.llm import LegalLLM
 from evaluator.LLM_evaluator import LegalLLMEvaluator
 
-import os
 import logging
-import dotenv
-
-dotenv.load_dotenv()
+from legora.config import get_settings
+from legora.logging import attempt_number, log_stage, query_context, setup_logging
 
 logger = logging.getLogger(__name__)
 
 
 class RAGPipeline:
-    def __init__(self, max_attempts: int = 3):
-        if max_attempts < 1:
+    def __init__(self, max_attempts: int | None = None) -> None:
+        """Configure the pipeline and initialize its external clients."""
+        if max_attempts is not None and max_attempts < 1:
             raise ValueError("max_attempts must be at least 1")
+        self.settings = get_settings()
+        setup_logging(self.settings.log_level)
         self.retriever = LegalRetriever()
-        self.llm = LegalLLM(api_key=os.getenv("GEMINI_API_KEY"))
-        self.evaluator = LegalLLMEvaluator(api_key=os.getenv("GEMINI_API_KEY"))
+        self.llm = LegalLLM()
+        self.evaluator = LegalLLMEvaluator()
 
-        self.max_attempts = max_attempts
+        self.max_attempts = max_attempts if max_attempts is not None else self.settings.max_attempts
         self.attempt = 0
         self.current_query = ""   # will hold the active (possibly expanded) query
 
@@ -49,9 +50,11 @@ class RAGPipeline:
     # ------------------------------------------------------------------
     def evaluate(self, answer: str, retrieval_result: dict):
         return self.evaluator.evaluate(
-            query=self.current_query,
+            question=self.current_query,
             answer=answer,
-            context=retrieval_result
+            qdrant_context=retrieval_result.get("statutory_results", []),
+            neo4j_context=list(retrieval_result.get("graph_context", {}).values()),
+            kanoon_context=retrieval_result.get("judgments", [])
         )
 
     # ------------------------------------------------------------------
@@ -59,7 +62,7 @@ class RAGPipeline:
     # ------------------------------------------------------------------
     def decide(self, evaluation: dict):
         score = evaluation.get("overall_score", 0)
-        if score >= 80:
+        if score >= self.settings.pass_threshold:
             return {"status": "PASS", "action": "RETURN_ANSWER"}
         return {"status": "FAIL", "action": evaluation.get("recommended_action", "RETRY")}
 
@@ -93,7 +96,7 @@ class RAGPipeline:
                 self.current_query = expanded
 
             # 2. Tune retrieval parameters
-            self.retrieval_kwargs["top_k"] = self.retrieval_kwargs.get("top_k", 10) + 5
+            self.retrieval_kwargs["top_k"] = self.retrieval_kwargs.get("top_k", self.settings.top_k) + 5
             self.retrieval_kwargs["threshold"] = self.retrieval_kwargs.get("threshold", 0.5) - 0.1
             logger.debug("Retrieval adjusted: %s", self.retrieval_kwargs)
 
@@ -116,7 +119,20 @@ class RAGPipeline:
     # ------------------------------------------------------------------
     # Main Search with Retry Loop
     # ------------------------------------------------------------------
-    def search(self, query: str):
+    def search(self, query: str) -> dict:
+        """Run one query under a unique request ID, restoring context on exit."""
+        with query_context():
+            with log_stage("query") as metrics:
+                result = self._search(query)
+                retrieval = result.get("retrieval") or {}
+                metrics.candidate_count = (
+                    len(retrieval.get("statutory_results", []))
+                    + len(retrieval.get("judgments", []))
+                )
+                return result
+
+    def _search(self, query: str) -> dict:
+        """Execute the generate/evaluate/retry loop within the query context."""
         self.attempt = 0
         self.current_query = query   # start with original
         self.retrieval_kwargs.clear()
@@ -128,19 +144,24 @@ class RAGPipeline:
 
         while self.attempt < self.max_attempts:
             self.attempt += 1
+            attempt_number.set(self.attempt)
             logger.info("Attempt %s/%s", self.attempt, self.max_attempts)
 
             # 1. Retrieve (uses self.current_query + retrieval_kwargs)
-            retrieval_result = self.get_context()
+            with log_stage("retrieval") as metrics:
+                retrieval_result = self.get_context()
+                metrics.candidate_count = len(retrieval_result.get("statutory_results", [])) + len(retrieval_result.get("judgments", []))
             last_retrieval = retrieval_result
             context = retrieval_result.get("final_context", "")
 
             # 2. Generate (uses self.current_query + generation_kwargs)
-            answer = self.get_llm_result(context)
+            with log_stage("generation", metrics.candidate_count):
+                answer = self.get_llm_result(context)
             last_answer = answer
 
             # 3. Evaluate
-            evaluation = self.evaluate(answer, retrieval_result)
+            with log_stage("evaluation", metrics.candidate_count):
+                evaluation = self.evaluate(answer, retrieval_result)
             last_eval = evaluation
 
             # 4. Decide

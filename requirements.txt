@@ -65,7 +65,7 @@ protobuf==7.35.1
 pycparser==3.0
 pycryptodome
 pydantic==2.13.4
-pydantic-settings
+pydantic-settings>=2,<3
 pydantic_core==2.46.4
 Pygments==2.20.0
 pypdfium2==5.9.0

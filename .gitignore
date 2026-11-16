@@ -17,6 +17,7 @@ pdfs/
 # Environment variables
 .env
 .env.*
+!.env.example
 *.local
 .pem
 .txt

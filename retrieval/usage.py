@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from legora.config import get_settings
+from legora.logging import log_stage
 from retrieval.hybrid_retrieval import HybridRetriever
 from retrieval.judgments import KanoonClient
 
@@ -89,10 +91,11 @@ References:
         query: str,
         **kwargs
     ):
+        settings = get_settings()
         # Extract known parameters with defaults
-        vector_k = kwargs.get('vector_k', 30)
-        rerank_k = kwargs.get('rerank_k', 5)
-        judgment_k = kwargs.get('judgment_k', 5)
+        vector_k = kwargs.get('vector_k', settings.top_k)
+        rerank_k = kwargs.get('rerank_k', settings.rerank_k)
+        judgment_k = kwargs.get('judgment_k', settings.judgment_k)
         include_full_docs = kwargs.get('include_full_docs', False)
 
         # Allow 'top_k' as alias for vector_k
@@ -106,10 +109,12 @@ References:
             rerank_k=rerank_k
         )
 
-        judgments = self.kanoon.retrieve(
-            query=query,
-            top_k=judgment_k
-        )
+        with log_stage("judgments") as metrics:
+            judgments = self.kanoon.retrieve(
+                query=query,
+                top_k=judgment_k
+            )
+            metrics.candidate_count = len(judgments)
 
         final_context = self.build_context(
             hybrid_result,

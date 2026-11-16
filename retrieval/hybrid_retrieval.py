@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from legora.config import get_settings
+from legora.logging import log_stage
 from db.embedder import LegalEmbedder
 from db.vector_store import QdrantStore
 from db.neo4j_store import Neo4jStore
@@ -221,9 +223,13 @@ class HybridRetriever:
     # HYBRID RETRIEVE
     # =====================================================
 
-    def retrieve(self, query: str, vector_k: int = 10, rerank_k: int = 5):
+    def retrieve(self, query: str, vector_k: int | None = None, rerank_k: int | None = None):
 
-        analysis = self.analyser.analyze_query(query)
+        settings = get_settings()
+        vector_k = vector_k if vector_k is not None else settings.top_k
+        rerank_k = rerank_k if rerank_k is not None else settings.rerank_k
+        with log_stage("query_analysis"):
+            analysis = self.analyser.analyze_query(query)
 
         queries = self.build_retrieval_queries(
             analysis
@@ -237,32 +243,38 @@ class HybridRetriever:
 
         logger.debug("Document filter: %s", document_filter)
 
-        for q in queries:
+        with log_stage("vector_search") as metrics:
+            for q in queries:
 
-            results = self.vector_search_filtered(
-                query=q,
-                document=document_filter,
-                k=vector_k
-            )
+                results = self.vector_search_filtered(
+                    query=q,
+                    document=document_filter,
+                    k=vector_k
+                )
 
-            points.extend(results)
-        
-        points=self.dedupe_points(points)
-        logger.debug("Retrieved %s unique vector results", len(points))
+                points.extend(results)
+
+            points=self.dedupe_points(points)
+            logger.debug("Retrieved %s unique vector results", len(points))
+            metrics.candidate_count = len(points)
 
         # Rerank
-        reranked_points = self.reranker.rerank(
-            query=query,
-            points=points,
-            top_k=rerank_k,
-            analysis=analysis
-        )
+        with log_stage("reranking") as metrics:
+            reranked_points = self.reranker.rerank(
+                query=query,
+                points=points,
+                top_k=rerank_k,
+                analysis=analysis
+            )
+            metrics.candidate_count = len(reranked_points)
 
         # Extract graph roots
         node_ids = self.extract_ids(reranked_points)
 
         # Expand graph
-        graph_context = self.expand_graph(node_ids)
+        with log_stage("graph_expansion") as metrics:
+            graph_context = self.expand_graph(node_ids)
+            metrics.candidate_count = len(graph_context)
 
         return {
 
