@@ -58,11 +58,7 @@ class LegalRetriever:
         )
 
         self.graph = (
-            Neo4jStore(
-                uri="bolt://localhost:7687",
-                username="neo4j",
-                password="password"
-            )
+            Neo4jStore()
         )
 
     # =====================================================

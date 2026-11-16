@@ -76,6 +76,12 @@ class BNSGraphBuilder:
                 "HAS_PART"
             )
 
+            self.store.merge_relationship(
+                part_id,
+                self.DOCUMENT_ID,
+                "BELONGS_TO"
+            )
+
             self._build_chapters(part.chapters, part_id)
 
     # =====================================================
@@ -105,6 +111,12 @@ class BNSGraphBuilder:
                 "HAS_CHAPTER"
             )
 
+            self.store.merge_relationship(
+                chapter_id,
+                parent_id,
+                "BELONGS_TO"
+            )
+
             self._build_sections(chapter.sections, chapter_id)
 
     # =====================================================
@@ -132,6 +144,12 @@ class BNSGraphBuilder:
                 chapter_id,
                 section_id,
                 "HAS_SECTION"
+            )
+
+            self.store.merge_relationship(
+                section_id,
+                chapter_id,
+                "BELONGS_TO"
             )
 
             self._build_clauses(section, section_id)
@@ -165,6 +183,12 @@ class BNSGraphBuilder:
                 "HAS_CLAUSE"
             )
 
+            self.store.merge_relationship(
+                clause_id,
+                section_id,
+                "BELONGS_TO"
+            )
+
             self._build_subclauses(clause, clause_id)
 
     # =====================================================
@@ -191,6 +215,12 @@ class BNSGraphBuilder:
                 clause_id,
                 sub_id,
                 "HAS_SUBCLAUSE"
+            )
+
+            self.store.merge_relationship(
+                sub_id,
+                clause_id,
+                "BELONGS_TO"
             )
 
             self._build_roman_clauses(sub, sub_id)
@@ -221,6 +251,12 @@ class BNSGraphBuilder:
                 "HAS_ROMANCLAUSE"
             )
 
+            self.store.merge_relationship(
+                roman_id,
+                sub_id,
+                "BELONGS_TO"
+            )
+
     # =====================================================
     # EXPLANATIONS
     # =====================================================
@@ -244,6 +280,12 @@ class BNSGraphBuilder:
                 section_id,
                 explanation_id,
                 "HAS_EXPLANATION"
+            )
+
+            self.store.merge_relationship(
+                explanation_id,
+                section_id,
+                "BELONGS_TO"
             )
 
     # =====================================================
@@ -270,6 +312,12 @@ class BNSGraphBuilder:
                 section_id,
                 illustration_id,
                 "HAS_ILLUSTRATION"
+            )
+
+            self.store.merge_relationship(
+                illustration_id,
+                section_id,
+                "BELONGS_TO"
             )
 
     # =====================================================

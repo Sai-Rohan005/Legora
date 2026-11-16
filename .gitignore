@@ -103,3 +103,6 @@ pnpm-lock.yaml
 
 *.pkl
 *.npy
+
+# Local Qdrant storage
+**/qdrant_data/

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import os
 import json
 import re
@@ -8,6 +10,8 @@ from typing import Any, Dict, List, Optional
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 load_dotenv()
 
 class LegalLLMEvaluator:
@@ -581,10 +585,4 @@ if __name__ == "__main__":
         kanoon_context=kanoon_results
     )
 
-    print(
-        json.dumps(
-            result,
-            indent=4,
-            ensure_ascii=False
-        )
-    )
+    logger.debug("%s", json.dumps(result, indent=4, ensure_ascii=False))

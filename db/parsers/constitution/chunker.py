@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Any
-from db.parsers.consitution.constitution_parser import ConstitutionParser
+from db.parsers.constitution.constitution_parser import ConstitutionParser
 
 # =========================================================
 # LEGAL CHUNK

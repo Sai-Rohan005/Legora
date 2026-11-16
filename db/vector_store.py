@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -10,6 +12,8 @@ from qdrant_client.models import (
     PointStruct
 )
 import os
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -158,11 +162,7 @@ class QdrantStore:
                 wait=True
             )
 
-            print(
-                f"Uploaded "
-                f"{min(end,total)}"
-                f"/{total}"
-            )
+            logger.debug("Uploaded %s/%s", min(end, total), total)
 
     def search_with_filter(
         self,

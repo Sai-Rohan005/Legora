@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from sentence_transformers import (
     SentenceTransformer
 )
+
+logger = logging.getLogger(__name__)
 
 
 class LegalEmbedder:
@@ -13,10 +17,7 @@ class LegalEmbedder:
         "BAAI/bge-large-en-v1.5"
     ):
 
-        print(
-            f"Loading embedding model: "
-            f"{model_name}"
-        )
+        logger.info("Loading embedding model: %s", model_name)
 
         self.model = (
             SentenceTransformer(
@@ -97,17 +98,9 @@ if __name__ == "__main__":
         )
     )
 
-    print()
+    logger.debug('%s %s', "Vectors:", len(vectors))
 
-    print(
-        "Vectors:",
-        len(vectors)
-    )
-
-    print(
-        "Dimension:",
-        len(vectors[0])
-    )
+    logger.debug('%s %s', "Dimension:", len(vectors[0]))
 
     query_vector = (
         embedder.embed_query(
@@ -115,12 +108,6 @@ if __name__ == "__main__":
         )
     )
 
-    print(
-        "Query Dimension:",
-        len(query_vector)
-    )
+    logger.debug('%s %s', "Query Dimension:", len(query_vector))
 
-    print(
-        "Model Dimension:",
-        embedder.vector_size()
-    )
+    logger.debug('%s %s', "Model Dimension:", embedder.vector_size())

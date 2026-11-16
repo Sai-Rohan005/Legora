@@ -1,4 +1,7 @@
+import logging
 from LegalRag.rag_pipeline import RAGPipeline
+
+logger = logging.getLogger(__name__)
 
 
 rag = RAGPipeline()
@@ -7,4 +10,4 @@ result = rag.search(
     "Can police arrest without warrant?"
 )
 
-print(result["answer"])
+logger.debug('%s', result["answer"])

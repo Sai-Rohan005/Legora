@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from db.parsers.consitution.legal_models import (
+from db.parsers.constitution.legal_models import (
     ConstitutionDocument,
     Preamble,
     Part,
@@ -11,14 +11,14 @@ from db.parsers.consitution.legal_models import (
     Article
 )
 
-from db.parsers.consitution.part_parser import PartParser
-from db.parsers.consitution.chapter_parser import ChapterParser
-from db.parsers.consitution.article_parser import ArticleParser
-from db.parsers.consitution.clause_parser import ClauseParser
-from db.parsers.consitution.proviso_parser import ProvisoParser
-from db.parsers.consitution.explanation_parser import ExplanationParser
-from db.parsers.consitution.schedule_parser import ScheduleParser
-from db.parsers.consitution.reference_extractor import ReferenceExtractor
+from db.parsers.constitution.part_parser import PartParser
+from db.parsers.constitution.chapter_parser import ChapterParser
+from db.parsers.constitution.article_parser import ArticleParser
+from db.parsers.constitution.clause_parser import ClauseParser
+from db.parsers.constitution.proviso_parser import ProvisoParser
+from db.parsers.constitution.explanation_parser import ExplanationParser
+from db.parsers.constitution.schedule_parser import ScheduleParser
+from db.parsers.constitution.reference_extractor import ReferenceExtractor
 
 
 class ConstitutionParser:

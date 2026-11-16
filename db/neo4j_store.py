@@ -1,28 +1,29 @@
 from __future__ import annotations
 
+import logging
+from builtins import str
+
 from neo4j import GraphDatabase
 import os
 import dotenv
+
+logger = logging.getLogger(__name__)
 dotenv.load_dotenv()
 class Neo4jStore:
 
-    def __init__(
-        self,
-        uri: str = "bolt://localhost:7687",
-        username: str = "neo4j",
-        password: str = "test12345"
-    ):
-        
-        uri = os.getenv("NEO4J_URI")
-        username = os.getenv("NEO4J_USERNAME")
-        password = os.getenv("NEO4J_PASSWORD")
-        print("URI:", repr(uri))
-        print("USERNAME:", repr(username))
-        print("PASSWORD SET:", password is not None)
+    def __init__(self) -> None:
+        """Create a driver from required NEO4J_* environment variables."""
+        names = ("NEO4J_URI", "NEO4J_USERNAME", "NEO4J_PASSWORD")
+        config = {name: os.getenv(name) for name in names}
+        missing = [name for name, value in config.items() if not value or not value.strip()]
+        if missing:
+            raise ValueError(
+                "Missing required Neo4j environment variables: " + ", ".join(missing)
+            )
 
         self.driver = GraphDatabase.driver(
-            uri,
-            auth=(username, password)
+            config["NEO4J_URI"],
+            auth=(config["NEO4J_USERNAME"], config["NEO4J_PASSWORD"])
         )
 
     # =====================================================
@@ -467,9 +468,7 @@ class Neo4jStore:
 
 if __name__ == "__main__":
 
-    store = Neo4jStore(
-        password="password"
-    )
+    store = Neo4jStore()
 
     store.create_constraints()
 
@@ -502,24 +501,12 @@ if __name__ == "__main__":
         "HAS_ARTICLE"
     )
 
-    print(
-        "Nodes:",
-        store.count_nodes()
-    )
+    logger.debug('%s %s', "Nodes:", store.count_nodes())
 
-    print(
-        "Relationships:",
-        store.count_relationships()
-    )
+    logger.debug('%s %s', "Relationships:", store.count_relationships())
 
-    print(
-        store.get_neighbors(
-            "CONST"
-        )
-    )
+    logger.debug("%s", store.get_neighbors("CONST"))
 
-    print(
-        store.label_stats()
-    )
+    logger.debug('%s', store.label_stats())
 
     store.close()

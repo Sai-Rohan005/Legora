@@ -55,15 +55,15 @@ from db.parsers.bsa.chunker import (
 # CONSTITUTION
 # =====================================================
 
-from db.parsers.consitution.cleaner import (
+from db.parsers.constitution.cleaner import (
     ConstitutionTextCleaner
 )
 
-from db.parsers.consitution.constitution_parser import (
+from db.parsers.constitution.constitution_parser import (
     ConstitutionParser
 )
 
-from db.parsers.consitution.chunker import (
+from db.parsers.constitution.chunker import (
     LegalChunker as ConstitutionChunker,
     chunks_to_dicts as constitution_to_dicts
 )

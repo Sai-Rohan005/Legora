@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from retrival.hybrid_retrieval import HybridRetriever
-from retrival.judgments import KanoonClient
+import logging
+
+from retrieval.hybrid_retrieval import HybridRetriever
+from retrieval.judgments import KanoonClient
+
+logger = logging.getLogger(__name__)
 
 
 class LegalRetriever:
@@ -95,18 +99,16 @@ References:
         if 'top_k' in kwargs:
             vector_k = kwargs['top_k']
 
-        # Pass through extra kwargs to underlying retrievers
+        # Forward only options supported by each retriever.
         hybrid_result = self.hybrid.retrieve(
             query=query,
             vector_k=vector_k,
-            rerank_k=rerank_k,
-            **kwargs
+            rerank_k=rerank_k
         )
 
         judgments = self.kanoon.retrieve(
             query=query,
-            top_k=judgment_k,
-            **kwargs
+            top_k=judgment_k
         )
 
         final_context = self.build_context(
@@ -127,4 +129,4 @@ References:
 if __name__ == "__main__":
     query = "My bike was stolen from outside my house. What punishment can the offender face?"
     retriever = LegalRetriever()
-    print(retriever.retrieve(query))
+    logger.debug('%s', retriever.retrieve(query))

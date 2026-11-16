@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import logging
+
 from db.embedder import LegalEmbedder
 from db.vector_store import QdrantStore
 from db.neo4j_store import Neo4jStore
-from retrival.cross_encoder import LegalReranker
+from retrieval.cross_encoder import LegalReranker
 from LegalRag.query_analyser import Analyser
+
+logger = logging.getLogger(__name__)
+
 
 class HybridRetriever:
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Validate graph configuration before loading retrieval models."""
+        self.graph = Neo4jStore()
 
         self.embedder = LegalEmbedder()
         self.reranker = LegalReranker()
@@ -16,12 +23,6 @@ class HybridRetriever:
 
         self.vector_db = QdrantStore(
             collection_name="legal_rag"
-        )
-
-        self.graph = Neo4jStore(
-            uri="bolt://localhost:7687",
-            username="neo4j",
-            password="test12345"
         )
 
     # =====================================================
@@ -87,7 +88,7 @@ class HybridRetriever:
     def get_children(self, node_id: str):
 
         query = """
-        MATCH p = (n)-[:BELONGS_TO*0..10]->(child)
+        MATCH p = (n)<-[:BELONGS_TO*0..10]-(child)
         WHERE n.id = $id
         RETURN p
         """
@@ -223,13 +224,10 @@ class HybridRetriever:
     def retrieve(self, query: str, vector_k: int = 10, rerank_k: int = 5):
 
         analysis = self.analyser.analyze_query(query)
-        # print(analysis)
 
         queries = self.build_retrieval_queries(
             analysis
         )
-        # for q in queries:
-        #     print(q)
 
         points = []
 
@@ -237,10 +235,7 @@ class HybridRetriever:
             analysis
         )
 
-        print(
-            f"\nDocument Filter: "
-            f"{document_filter}"
-        )
+        logger.debug("Document filter: %s", document_filter)
 
         for q in queries:
 
@@ -253,26 +248,7 @@ class HybridRetriever:
             points.extend(results)
         
         points=self.dedupe_points(points)
-        print("\n" + "=" * 80)
-        print("TOP RESULTS BEFORE RERANK")
-        print("=" * 80)
-
-        sorted_points = sorted(
-            points,
-            key=lambda x: x.score,
-            reverse=True
-        )
-
-        for idx, point in enumerate(
-            sorted_points[:20],
-            start=1
-        ):
-
-            print(
-                f"{idx}. "
-                f"{point.payload.get('chunk_id')} "
-                f"| {point.score:.4f}"
-            )
+        logger.debug("Retrieved %s unique vector results", len(points))
 
         # Rerank
         reranked_points = self.reranker.rerank(

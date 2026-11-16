@@ -1,15 +1,20 @@
-from retrival.usage import LegalRetriever
+from retrieval.usage import LegalRetriever
 from LLM.llm import LegalLLM
 from evaluator.LLM_evaluator import LegalLLMEvaluator
 
 import os
+import logging
 import dotenv
 
 dotenv.load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 
 class RAGPipeline:
     def __init__(self, max_attempts: int = 3):
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
         self.retriever = LegalRetriever()
         self.llm = LegalLLM(api_key=os.getenv("GEMINI_API_KEY"))
         self.evaluator = LegalLLMEvaluator(api_key=os.getenv("GEMINI_API_KEY"))
@@ -75,7 +80,8 @@ class RAGPipeline:
             return f"{query} relevant act section"
         return query
 
-    def adjust_for_retry(self, evaluation: dict):
+    def adjust_for_retry(self, evaluation: dict) -> None:
+        """Tune the next attempt without changing the search-owned counter."""
         stage = evaluation.get("failure_stage", "UNKNOWN")
 
         # ---- EARLIEST STAGE: RETRIEVAL ----
@@ -83,31 +89,29 @@ class RAGPipeline:
             # 1. Expand the query (no LLM)
             expanded = self._expand_query(self.current_query)
             if expanded != self.current_query:
-                print(f"📝 Expanding query: '{self.current_query}' -> '{expanded}'")
+                logger.debug("Expanded retrieval query")
                 self.current_query = expanded
 
             # 2. Tune retrieval parameters
             self.retrieval_kwargs["top_k"] = self.retrieval_kwargs.get("top_k", 10) + 5
             self.retrieval_kwargs["threshold"] = self.retrieval_kwargs.get("threshold", 0.5) - 0.1
-            print(f"🔁 Retrieval adjusted: {self.retrieval_kwargs}")
+            logger.debug("Retrieval adjusted: %s", self.retrieval_kwargs)
 
         # ---- MIDDLE STAGE: CONTEXT ----
         elif stage == "CONTEXT":
             self.retrieval_kwargs["include_full_docs"] = True
-            print(f"🔁 Context adjusted: {self.retrieval_kwargs}")
+            logger.debug("Context adjusted: %s", self.retrieval_kwargs)
 
         # ---- LATER STAGES: GENERATION / CITATION ----
         elif stage in ("GENERATION", "CITATION"):
             self.generation_kwargs["temperature"] = self.generation_kwargs.get("temperature", 0.7) - 0.2
             self.generation_kwargs["max_tokens"] = self.generation_kwargs.get("max_tokens", 500) + 200
-            print(f"🔁 Generation adjusted: {self.generation_kwargs}")
+            logger.debug("Generation adjusted: %s", self.generation_kwargs)
 
         else:
             # Generic fallback
             self.generation_kwargs["temperature"] = self.generation_kwargs.get("temperature", 0.7) * 0.9
-            print("🔄 Generic adjustment")
-
-        self.attempt += 1
+            logger.debug("Applied generic retry adjustment")
 
     # ------------------------------------------------------------------
     # Main Search with Retry Loop
@@ -124,7 +128,7 @@ class RAGPipeline:
 
         while self.attempt < self.max_attempts:
             self.attempt += 1
-            print(f"🔄 Attempt {self.attempt}/{self.max_attempts} (query: '{self.current_query}')")
+            logger.info("Attempt %s/%s", self.attempt, self.max_attempts)
 
             # 1. Retrieve (uses self.current_query + retrieval_kwargs)
             retrieval_result = self.get_context()
@@ -143,7 +147,7 @@ class RAGPipeline:
             decision = self.decide(evaluation)
 
             if decision["status"] == "PASS":
-                print("✅ PASS")
+                logger.info("Answer passed evaluation")
                 return {
                     "query": self.current_query,
                     "answer": answer,
@@ -154,11 +158,12 @@ class RAGPipeline:
                 }
 
             # 5. Failure -> adjust (no LLM calls here)
-            print(f"❌ Attempt {self.attempt} failed: {evaluation.get('failure_stage', 'UNKNOWN')}")
-            self.adjust_for_retry(evaluation)
+            logger.info("Attempt %s failed evaluation", self.attempt)
+            if self.attempt < self.max_attempts:
+                self.adjust_for_retry(evaluation)
 
         # Exhausted
-        print("❌ All attempts failed.")
+        logger.warning("All %s attempts failed evaluation", self.max_attempts)
         return {
             "query": self.current_query,
             "answer": last_answer,

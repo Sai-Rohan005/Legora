@@ -6,7 +6,7 @@ from qdrant_client.models import (
     PointStruct
 )
 
-from db.parsers.bnss.embedder_temp import (
+from db.parsers.bnss.embedder import (
     LegalEmbedder
 )
 

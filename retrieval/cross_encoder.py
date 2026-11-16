@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 from sentence_transformers import CrossEncoder
+
+
+logger = logging.getLogger(__name__)
 
 
 class LegalReranker:
@@ -202,24 +207,11 @@ class LegalReranker:
         # DEBUG LOGGING
         # =============================
 
-        print("\n" + "=" * 80)
-        print("RERANK RESULTS")
-        print("=" * 80)
-
-        for rank, item in enumerate(
-            ranked[:top_k],
-            start=1
-        ):
-
-            point = item["point"]
-
-            print(
-                f"{rank}. "
-                f"{point.payload.get('chunk_id')} "
-                f"| rerank={item['rerank_score']:.4f} "
-                f"| final={item['final_score']:.4f}"
+        for rank, item in enumerate(ranked[:top_k], start=1):
+            logger.debug(
+                "Rank %s: chunk=%s rerank=%.4f final=%.4f",
+                rank, item["point"].payload.get("chunk_id"),
+                item["rerank_score"], item["final_score"]
             )
-
-        print("=" * 80)
 
         return results

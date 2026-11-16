@@ -4,7 +4,7 @@ from __future__ import annotations
 # CONSTITUTION
 # =====================================================
 
-from db.parsers.consitution.constitution_parser import (
+from db.parsers.constitution.constitution_parser import (
     ConstitutionParser
 )
 
@@ -259,11 +259,7 @@ class AllFilesLoader:
 
     def main(self):
 
-        store = Neo4jStore(
-            uri="bolt://localhost:7687",
-            username="neo4j",
-            password="test12345"
-        )
+        store = Neo4jStore()
 
         # -----------------------------------------
         # Create constraints

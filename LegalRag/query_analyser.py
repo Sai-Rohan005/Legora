@@ -1,8 +1,11 @@
+import logging
 from google import genai
 from pydantic import BaseModel
 from typing import List, Optional
 import os
 import dotenv
+
+logger = logging.getLogger(__name__)
 
 dotenv.load_dotenv()
 
@@ -97,4 +100,4 @@ if __name__=="__main__":
     analyser=Analyser()
     analysis = analyser.analyze_query(query)
 
-    print(analysis.model_dump())
+    logger.debug('%s', analysis.model_dump())

@@ -1,10 +1,14 @@
 import requests
+import logging
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 from google import genai
+
+
+logger = logging.getLogger(__name__)
 
 
 class LegalQueryRewriter:
@@ -117,7 +121,7 @@ class KanoonClient:
                 full_doc = self.get_document(doc_id)
                 judgments.append(full_doc)
 
-            except Exception as e:
-                print(f"Failed to fetch {doc_id}: {e}")
+            except Exception:
+                logger.warning("Failed to fetch judgment %s", doc_id)
 
         return judgments

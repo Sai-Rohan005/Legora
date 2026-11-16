@@ -1,4 +1,4 @@
-from db.parsers.bnss.embedder_temp import LegalEmbedder
+from db.parsers.bnss.embedder import LegalEmbedder
 from db.parsers.bnss.qdrant_store import QdrantStore
 
 

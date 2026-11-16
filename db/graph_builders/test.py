@@ -50,11 +50,7 @@ def print_node(data):
 
 def main():
 
-    graph = Neo4jStore(
-        uri="bolt://localhost:7687",
-        username="neo4j",
-        password="test12345"
-    )
+    graph = Neo4jStore()
 
     while True:
 
