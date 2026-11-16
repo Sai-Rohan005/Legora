@@ -109,3 +109,8 @@ pnpm-lock.yaml
 
 # Local Qdrant storage
 **/qdrant_data/
+
+# Evaluation write locks and machine-local prediction reports
+/eval/*.lock
+/eval/predictions.jsonl
+/eval/metrics.json

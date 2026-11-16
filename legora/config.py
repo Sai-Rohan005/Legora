@@ -88,3 +88,14 @@ def get_settings() -> Settings:
 def get_client_settings() -> ClientSettings:
     """Load UI connection settings independently of backend credentials."""
     return ClientSettings()
+
+
+class EvaluationSettings(ClientSettings):
+    """Configure dataset tooling independently of Neo4j and Indian Kanoon."""
+
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str = "gemini-2.5-flash-lite"
+    qdrant_url: str | None = None
+    qdrant_api_key: SecretStr | None = None
+    external_timeout_seconds: float = Field(default=30, gt=0, allow_inf_nan=False)
+    pass_threshold: float = Field(default=80, ge=0, le=100)

@@ -159,3 +159,7 @@ logic run unchanged by mocks. Structural statute fixtures are abridged test text
 with explicit test-only connector sentences, rather than authoritative statutes.
 Tests also cover FastAPI TestClient lifecycle/validation, dependency timeouts,
 query serialization, and Streamlit HTTP behavior.
+
+The human-reviewed evaluation workflow is documented in [eval/README.md](eval/README.md):
+balanced stored-provision sampling, Gemini drafts, interactive label review, and
+reviewed-only retrieval/refusal metrics.
