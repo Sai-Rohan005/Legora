@@ -39,6 +39,8 @@ class Settings(ClientSettings):
     neo4j_password: SecretStr
     kanoon_token: SecretStr
 
+    use_bm25: bool = False
+    exact_id_lookup: bool | None = None
     top_k: int = Field(default=30, ge=1)
     rerank_k: int = Field(default=5, ge=1)
     judgment_k: int = Field(default=5, ge=1)

@@ -384,3 +384,42 @@ def test_worst_failures_are_capped_and_include_poor_ranking_with_full_recall(
     assert all_failures[-1]["id"] == "rank-two"
     assert all_failures[-1]["root_recall_at_10"] == 1
     assert all_failures[-1]["root_ndcg_at_10"] < 1
+
+
+def test_g_uses_shared_bm25_fusion_before_real_reranking(
+    retriever: HybridRetriever, cache: AnalysisCache,
+) -> None:
+    """Sparse retrieval recovers a dense miss through the same helper used at runtime."""
+    from threading import Lock
+    from retrieval.lexical import BM25Retriever, RetrievalHit
+
+    sparse_hit = RetrievalHit(payload={"chunk_id": "BNS-999", "text": "ownership"})
+    retriever._bm25 = BM25Retriever([*retriever.vector_search_filtered.return_value, sparse_hit])
+    retriever._bm25_lock = Lock()
+    retriever.reranker.model.predict.side_effect = lambda pairs, **kwargs: [0.9 if "ownership" in passage else 0.1 for _, passage in pairs]
+    e = run_configuration("ownership question", CONFIGURATIONS["E"], retriever, cache, 10)
+    g = run_configuration("ownership question", CONFIGURATIONS["G"], retriever, cache, 10)
+    assert "BNS-999" not in e["ranked_ids"]
+    assert g["ranked_ids"][0] == "BNS-999"
+    assert len(g["ranked_ids"]) <= 10
+    assert g["graph_ids"] is None
+    gold = item(["BNS-999"], question="ownership question")
+    rows, _ = evaluate([gold], [CONFIGURATIONS["E"], CONFIGURATIONS["G"]], retriever, cache, 10)
+    summaries = aggregate(rows, 42, 100)
+    by_config = {row["configuration"]: row for row in summaries if row["match"] == "root"}
+    assert by_config["E"]["recall_at_5"] == 0
+    assert by_config["G"]["recall_at_5"] == 1
+    assert "G" in markdown_table(summaries)
+
+
+def test_g_exact_lookup_is_pinned_after_reranking(retriever: HybridRetriever, cache: AnalysisCache) -> None:
+    """The evaluation route retains the explicitly requested stored result at rank one."""
+    from dataclasses import replace
+
+    exact = point("BNS-303", 0.0)
+    retriever.vector_db = Mock()
+    retriever.vector_db.lookup_chunk_ids.return_value = [exact]
+    retriever.reranker.model.predict.return_value = [100, -100]
+    outcome = run_configuration("section 303 BNS", replace(CONFIGURATIONS["G"], bm25=False), retriever, cache, 10)
+    assert outcome["ranked_ids"][0] == "BNS-303"
+    assert outcome["exact_lookup_ids"] == ["BNS-303"]

@@ -181,9 +181,11 @@ Every preset uses the same retrieval path and feature switches:
 | D | C plus BAAI/bge-reranker-large, without additive legal boosts |
 | E | D plus the existing legal-boost heuristics |
 | F | E plus graph expansion from the top 10 ranked results |
+| G | E plus BM25/dense RRF (k=60) and explicit provision-ID lookup |
 
 D and E use identical candidate pools and the existing analysis-enriched rerank
 query; only the additive legal-boost switch differs. F preserves E's ranked list.
+G keeps graph expansion off to isolate the new retrieval path against E.
 Analysis receives only the question, never the expected IDs, gold act or intent.
 An unknown primary act stays unfiltered, as in the production helper.
 
@@ -196,6 +198,37 @@ An unknown primary act stays unfiltered, as in the production helper.
 python -m eval.run_retrieval_eval --configs E --no-legal-boost --no-graph
 ```
 
+`--bm25/--no-bm25` and `--exact-id-lookup/--no-exact-id-lookup` control the
+new stages independently. Compare E and G, or disable lookup to isolate BM25/RRF:
+
+```bash
+python -m eval.run_retrieval_eval --configs E G --offline-analysis
+python -m eval.run_retrieval_eval --configs G --no-exact-id-lookup
+```
+
+G builds one BM25Okapi index by scrolling payloads from the same Qdrant collection,
+without vectors. It searches the original question, applies the inferred act
+filter, and fuses its ranked hits with the merged dense ranking using
+`sum(1 / (60 + rank))`. Each ID receives at most one contribution per stream.
+Only chunks with an overlapping query token enter the lexical ranking; negative
+BM25 scores remain valid matches. Both streams are capped to the common candidate
+budget, and fusion is capped again before reranking. The run manifest records
+the RRF constant, lexical query choice, flags and rank-bm25 package version.
+
+Explicit references such as `section 303 BNS`, `BNSS section 35`, and
+`article 21 Constitution` trigger payload `chunk_id` equality lookups. A bare
+`section 303` does not identify an act and causes no exact lookup. Qualified
+multi-act references and existing legacy Constitution IDs are supported. Only
+actual stored hits are prepended; nonexistent IDs are not synthesized. Exact
+hits bypass a potentially wrong inferred act filter and are pinned after
+reranking as well as before it, within the same candidate/output limits.
+
+BM25 is **not enabled by default in production**. The current table marks G as
+not evaluated because no reviewed, answerable gold items are available and the
+database corpus was removed. There is no measured Recall@5/MRR improvement to
+justify changing the default. Compare E/G on reviewed labels after restoring the
+corpus; the script never edits production defaults automatically.
+
 Overrides are recorded in the run manifest and the report's feature table, so a
 customized preset is not mistaken for the default configuration.
 
@@ -207,9 +240,10 @@ the reranker an unbounded larger budget. Dense search defaults to Qdrant exact
 search for reproducibility; `--approximate-search` uses production ANN search.
 Production retrieval defaults remain unchanged.
 
-All models are loaded once per run. A needs only the embedder and Qdrant. B–F
-need Gemini credentials only on a cache miss; only D–F load the reranker, and only
-F needs `NEO4J_*`. No Indian Kanoon requests or answer-generation calls are made.
+All models are loaded once per run. A needs only the embedder and Qdrant. B–G
+need Gemini credentials only on a cache miss; only D–G load the reranker, and
+graph-enabled configurations (F by default) need `NEO4J_*`. No Indian Kanoon
+requests or answer-generation calls are made.
 Use `--collection`, `--embedder-model` and `--reranker-model` to select a frozen
 corpus and pinned/local model snapshots.
 

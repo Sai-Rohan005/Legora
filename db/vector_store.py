@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -13,6 +15,9 @@ from qdrant_client.models import (
     SearchParams
 )
 from legora.config import EvaluationSettings, Settings, get_settings
+
+if TYPE_CHECKING:
+    from retrieval.lexical import RetrievalHit
 
 logger = logging.getLogger(__name__)
 
@@ -221,3 +226,29 @@ class QdrantStore:
             collection_name=
                 self.collection_name
         ).count
+
+    def iter_chunks(self, chunk_ids: list[str] | None = None) -> Iterator[RetrievalHit]:
+        """Scroll stored payloads without vectors, optionally matching exact chunk IDs."""
+        from retrieval.lexical import RetrievalHit
+
+        if chunk_ids == []:
+            return
+        query_filter = Filter(should=[
+            FieldCondition(key="chunk_id", match=MatchValue(value=value))
+            for value in chunk_ids
+        ]) if chunk_ids is not None else None
+        offset = None
+        while True:
+            records, offset = self.client.scroll(
+                collection_name=self.collection_name, scroll_filter=query_filter,
+                offset=offset, limit=256, with_payload=True, with_vectors=False,
+            )
+            for record in records:
+                if record.payload and record.payload.get("chunk_id"):
+                    yield RetrievalHit(payload=record.payload, id=record.id)
+            if offset is None:
+                break
+
+    def lookup_chunk_ids(self, chunk_ids: list[str]) -> list[RetrievalHit]:
+        """Fetch existing payload.chunk_id values, never treating them as Qdrant point IDs."""
+        return list(self.iter_chunks(chunk_ids))

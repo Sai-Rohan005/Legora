@@ -25,6 +25,7 @@ from eval.models import GoldItem
 from eval.sample import provision_root
 from eval.storage import atomic_text, load_gold
 from legora.config import EvaluationSettings
+from retrieval.lexical import prepend_exact
 
 if TYPE_CHECKING:
     from retrieval.hybrid_retrieval import HybridRetriever
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Configuration:
-    """One engine's feature switches; A–F are cumulative presets."""
+    """One engine's feature switches; A–F are cumulative presets; G adds lexical retrieval to E."""
 
     name: str
     act_filter: bool = False
@@ -40,6 +41,8 @@ class Configuration:
     rerank: bool = False
     legal_boost: bool = False
     graph: bool = False
+    bm25: bool = False
+    exact_id_lookup: bool = False
 
 
 CONFIGURATIONS = {
@@ -49,6 +52,7 @@ CONFIGURATIONS = {
     "D": Configuration("D", act_filter=True, multi_query=True, rerank=True),
     "E": Configuration("E", act_filter=True, multi_query=True, rerank=True, legal_boost=True),
     "F": Configuration("F", act_filter=True, multi_query=True, rerank=True, legal_boost=True, graph=True),
+    "G": Configuration("G", act_filter=True, multi_query=True, rerank=True, legal_boost=True, bm25=True, exact_id_lookup=True),
 }
 METRICS = ("recall_at_1", "recall_at_5", "recall_at_10", "mrr", "ndcg_at_10", "context_recall", "combined_context_recall")
 
@@ -159,17 +163,24 @@ def run_configuration(
         points.extend(retriever.vector_search_filtered(query, document=document, k=candidates))
     # Same merged budget for every configuration, and an explicit tie breaker.
     points = sorted(retriever.dedupe_points(points), key=lambda point: (-float(point.score), point.payload["chunk_id"]))[:candidates]
+    exact = []
+    if configuration.bm25 or configuration.exact_id_lookup:
+        points, exact = retriever.fuse_candidates(
+            question, points, document, candidates, configuration.bm25, configuration.exact_id_lookup,
+        )
     if configuration.rerank:
         points = retriever.reranker.rerank(
             query=question, points=points, top_k=candidates, analysis=analysis,
             apply_legal_boost=configuration.legal_boost,
         )
+    if exact:
+        points = prepend_exact(points, exact, candidates)
     ranked = [point.payload["chunk_id"] for point in points]
     graph_ids = None
     if configuration.graph:
         roots = sorted(retriever.extract_ids(points[:10]))
         graph_ids = sorted(graph_node_ids(retriever.expand_graph(roots)))
-    return {"ranked_ids": ranked, "graph_ids": graph_ids, "candidate_count": len(points), "query_count": len(unique_queries)}
+    return {"ranked_ids": ranked, "graph_ids": graph_ids, "candidate_count": len(points), "query_count": len(unique_queries), "exact_lookup_ids": [point.payload["chunk_id"] for point in exact]}
 
 
 def target_groups(item: GoldItem, match: str) -> list[set[str]]:
@@ -293,6 +304,7 @@ def live_retriever(
     collection: str, embedder_model: str, reranker_model: str, exact_search: bool = True,
 ) -> Iterator[HybridRetriever]:
     """Load each needed model once and skip Gemini/Neo4j/reranker when not requested."""
+    from threading import Lock
     from db.embedder import LegalEmbedder
     from db.neo4j_store import Neo4jStore
     from db.vector_store import QdrantStore
@@ -301,6 +313,8 @@ def live_retriever(
 
     with ExitStack() as resources:
         retriever = HybridRetriever.__new__(HybridRetriever)
+        retriever._bm25 = None
+        retriever._bm25_lock = Lock()
         if any(configuration.graph for configuration in configurations):
             retriever.graph = Neo4jStore(settings=settings)
             resources.callback(retriever.graph.close)
@@ -308,6 +322,8 @@ def live_retriever(
         resources.callback(retriever.vector_db.client.close)
         # Check connectivity before loading gigabytes of model weights.
         retriever.vector_db.client.get_collection(collection)
+        if any(configuration.bm25 for configuration in configurations):
+            retriever.get_bm25()
         retriever.embedder = LegalEmbedder(model_name=embedder_model)
         retriever.embedder.model.eval()
         if any(configuration.rerank for configuration in configurations):
@@ -325,9 +341,9 @@ def write_reports(directory: Path, summaries: list[dict], intents: list[dict], f
     atomic_text(directory / "retrieval_ablation_run.json", json.dumps(metadata, indent=2, sort_keys=True) + "\n")
     report = "# Retrieval ablation\n\nValues are macro query means with percentile bootstrap 95% confidence intervals.\n\n"
     if metadata.get("configurations"):
-        report += "| Config | Act filter | Multi-query | Rerank | Legal boost | Graph |\n|---|---|---|---|---|---|\n"
+        report += "| Config | Act filter | Multi-query | Rerank | Legal boost | Graph | BM25/RRF | Exact lookup |\n|---|---|---|---|---|---|---|---|\n"
         for configuration in metadata["configurations"]:
-            report += "| " + " | ".join(str(configuration[key]) for key in ("name", "act_filter", "multi_query", "rerank", "legal_boost", "graph")) + " |\n"
+            report += "| " + " | ".join(str(configuration[key]) for key in ("name", "act_filter", "multi_query", "rerank", "legal_boost", "graph", "bm25", "exact_id_lookup")) + " |\n"
         report += "\n"
     report += markdown_table(summaries)
     report += "\n## Per-intent breakdown\n\n" + markdown_table(intents)
@@ -347,7 +363,7 @@ def main() -> None:
     parser.add_argument("--gold", type=Path, default=Path("eval/gold.jsonl"))
     parser.add_argument("--output-dir", type=Path, default=Path("results"))
     parser.add_argument("--configs", nargs="+", choices=CONFIGURATIONS, default=list(CONFIGURATIONS))
-    for flag in ("act-filter", "multi-query", "rerank", "legal-boost", "graph"):
+    for flag in ("act-filter", "multi-query", "rerank", "legal-boost", "graph", "bm25", "exact-id-lookup"):
         parser.add_argument("--" + flag, action=argparse.BooleanOptionalAction, default=None, help="Override this feature in every selected preset")
     parser.add_argument("--candidates", type=int, default=50, help="Per-query and merged candidate budget, at least 10")
     parser.add_argument("--collection", default="legal_rag")
@@ -363,7 +379,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.candidates < 10 or args.bootstrap_samples < 1 or not 0 <= args.seed < 2**32:
         parser.error("Require candidates >= 10, bootstrap-samples >= 1, and a 32-bit unsigned seed")
-    overrides = {name: getattr(args, name) for name in ("act_filter", "multi_query", "rerank", "legal_boost", "graph") if getattr(args, name) is not None}
+    overrides = {name: getattr(args, name) for name in ("act_filter", "multi_query", "rerank", "legal_boost", "graph", "bm25", "exact_id_lookup") if getattr(args, name) is not None}
     configurations = [Configuration(**{**asdict(CONFIGURATIONS[name]), **overrides}) for name in dict.fromkeys(args.configs)]
     if any(configuration.legal_boost and not configuration.rerank for configuration in configurations):
         parser.error("Legal boost requires --rerank; choose a reranking preset or disable legal boost")
@@ -378,7 +394,12 @@ def main() -> None:
                 ("retrieval_ablation.md", "# Retrieval ablation — not run\n\nNo reviewed, answerable gold items are available. No retrieval scores or confidence intervals have been computed.\n"),
             ):
                 path = args.output_dir / filename
-                if not path.exists():
+                if not path.exists() or (filename.endswith(".md") and path.read_text().startswith("# Retrieval ablation — not run")):
+                    if filename.endswith(".md"):
+                        content += "\n| Configuration | BM25/RRF | Exact lookup | Recall@5 | MRR |\n|---|---|---|---|---|\n"
+                        for configuration in configurations:
+                            content += f"| {configuration.name} | {configuration.bm25} | {configuration.exact_id_lookup} | Not evaluated | Not evaluated |\n"
+                        content += "\nBM25 remains disabled by default pending reviewed Recall@5/MRR evidence.\n"
                     atomic_text(path, content)
             parser.exit(1, "Not run: no reviewed, answerable gold items. Review labels and restore the corpus first.\n")
         settings = EvaluationSettings()
@@ -404,11 +425,12 @@ def main() -> None:
             "bootstrap_unit": "query", "interval_method": "percentile", "candidate_budget": args.candidates,
             "mrr_depth": args.candidates, "graph_seed_depth": 10, "collection": args.collection,
             "exact_dense_search": not args.approximate_search, "model_revisions": model_revisions,
+            "rrf_k": 60, "bm25_query": "original", "bm25_enabled_by_default": False,
             "embedder_model": args.embedder_model, "reranker_model": args.reranker_model,
             "analysis_model": settings.gemini_model, "analysis_signature": cache.signature,
             "analysis_cache_hits": cache.hits, "analysis_cache_misses": cache.misses,
             "configurations": [asdict(configuration) for configuration in configurations],
-            "packages": {name: version(name) for name in ("torch", "sentence-transformers", "qdrant-client", "google-genai", "numpy")},
+            "packages": {name: version(name) for name in ("torch", "sentence-transformers", "qdrant-client", "google-genai", "numpy", "rank-bm25")},
         }
         report = write_reports(args.output_dir, aggregate(rows, args.seed, args.bootstrap_samples), aggregate(rows, args.seed, args.bootstrap_samples, by_intent=True), worst_failures(rows, details), details, metadata)
         print(report)

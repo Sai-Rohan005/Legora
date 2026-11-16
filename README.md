@@ -163,3 +163,17 @@ query serialization, and Streamlit HTTP behavior.
 The human-reviewed evaluation workflow is documented in [eval/README.md](eval/README.md):
 balanced stored-provision sampling, Gemini drafts, interactive label review, and
 reviewed-only retrieval/refusal metrics.
+
+Optional lexical retrieval is controlled by `USE_BM25=false` (the default), or
+`HybridRetriever(use_bm25=True)`. Enabling it builds one in-memory BM25 index
+per retriever from the same Qdrant chunk payloads and fuses dense/BM25 ranks with
+RRF (k=60) before reranking. The snapshot is read at startup; restart/recreate the
+retriever after corpus changes. BM25 uses case-folded Unicode word/number tokens
+and does not require a second vector collection or new ingestion schema.
+
+When BM25 is enabled, explicit section/article references also perform exact
+stored-ID lookup and keep found results at the front after reranking. Override
+this independently with `EXACT_ID_LOOKUP=true/false` or the constructor's
+`exact_id_lookup` argument. Without an explicit act, no statute is guessed.
+Both stages remain off under the default configuration pending reviewed
+Recall@5/MRR evidence; configuration G in the ablation runner evaluates them.

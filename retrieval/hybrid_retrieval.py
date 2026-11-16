@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import logging
+from threading import Lock
+from typing import Any
 
 from legora.config import get_settings
+from retrieval.lexical import BM25Retriever, explicit_provisions, prepend_exact, reciprocal_rank_fusion
 from legora.logging import log_stage
 from db.embedder import LegalEmbedder
 from db.vector_store import QdrantStore
@@ -15,8 +18,14 @@ logger = logging.getLogger(__name__)
 
 class HybridRetriever:
 
-    def __init__(self) -> None:
+    def __init__(self, use_bm25: bool | None = None, exact_id_lookup: bool | None = None) -> None:
         """Validate graph configuration before loading retrieval models."""
+        settings = get_settings()
+        self.use_bm25 = settings.use_bm25 if use_bm25 is None else use_bm25
+        configured_lookup = settings.exact_id_lookup if exact_id_lookup is None else exact_id_lookup
+        self.exact_id_lookup = self.use_bm25 if configured_lookup is None else configured_lookup
+        self._bm25: BM25Retriever | None = None
+        self._bm25_lock = Lock()
         self.graph = Neo4jStore()
 
         self.embedder = LegalEmbedder()
@@ -26,6 +35,35 @@ class HybridRetriever:
         self.vector_db = QdrantStore(
             collection_name="legal_rag"
         )
+        if self.use_bm25:
+            self.get_bm25()
+
+    def get_bm25(self) -> BM25Retriever:
+        """Build the lexical snapshot once per retriever; recreate it after corpus updates."""
+        with self._bm25_lock:
+            if self._bm25 is None:
+                self._bm25 = BM25Retriever(self.vector_db.iter_chunks())
+        return self._bm25
+
+    def exact_matches(self, query: str) -> list[Any]:
+        """Resolve explicitly named provisions through real stored chunk-ID lookups."""
+        requests = explicit_provisions(query)
+        if not requests:
+            return []
+        identifiers = list(dict.fromkeys(identifier for aliases in requests for identifier in aliases))
+        found = {point.payload["chunk_id"]: point for point in self.vector_db.lookup_chunk_ids(identifiers)}
+        return [next(found[value] for value in aliases if value in found)
+                for aliases in requests if any(value in found for value in aliases)]
+
+    def fuse_candidates(
+        self, query: str, points: list[Any], document: str | None, limit: int,
+        use_bm25: bool, exact_id_lookup: bool,
+    ) -> tuple[list[Any], list[Any]]:
+        """Fuse dense/BM25 ranks before reranking and protect exact hits from truncation."""
+        dense = sorted(self.dedupe_points(points), key=lambda point: (-float(point.score), point.payload["chunk_id"]))[:limit]
+        fused = reciprocal_rank_fusion([dense, self.get_bm25().search(query, document=document, k=limit)], k=60, limit=limit) if use_bm25 else dense
+        exact = self.exact_matches(query)[:max(0, limit)] if exact_id_lookup else []
+        return prepend_exact(fused, exact, limit), exact
 
     # =====================================================
     # VECTOR SEARCH
@@ -263,6 +301,16 @@ class HybridRetriever:
             logger.debug("Retrieved %s unique vector results", len(points))
             metrics.candidate_count = len(points)
 
+        dense_points = points
+        exact = []
+        if getattr(self, "use_bm25", False) or getattr(self, "exact_id_lookup", False):
+            with log_stage("lexical_fusion") as metrics:
+                points, exact = self.fuse_candidates(
+                    query, points, document_filter, vector_k,
+                    getattr(self, "use_bm25", False), getattr(self, "exact_id_lookup", False),
+                )
+                metrics.candidate_count = len(points)
+
         # Rerank
         with log_stage("reranking") as metrics:
             reranked_points = self.reranker.rerank(
@@ -271,6 +319,8 @@ class HybridRetriever:
                 top_k=rerank_k,
                 analysis=analysis
             )
+            if exact:
+                reranked_points = prepend_exact(reranked_points, exact, rerank_k)
             metrics.candidate_count = len(reranked_points)
 
         # Extract graph roots
@@ -286,7 +336,8 @@ class HybridRetriever:
         return {
 
             "query": query,
-            "vector_results": points,
+            "vector_results": dense_points,
+            "fused_results": points,
             "reranked_results": reranked_points,
             "node_ids": node_ids,
             "graph_context": graph_context

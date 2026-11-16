@@ -135,7 +135,7 @@ class RAGPipeline:
                 timings = stage_timings.get() or {}
                 result["latency_ms"] = {
                     "analysis": round(timings.get("query_analysis", 0), 3),
-                    "retrieval": round(timings.get("vector_search", 0) + timings.get("judgments", 0), 3),
+                    "retrieval": round(timings.get("vector_search", 0) + timings.get("judgments", 0) + timings.get("lexical_fusion", 0), 3),
                     "rerank": round(timings.get("reranking", 0), 3),
                     "graph": round(timings.get("graph_expansion", 0), 3),
                     "generation": round(timings.get("generation", 0), 3),
