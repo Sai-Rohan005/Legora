@@ -153,3 +153,130 @@ python -m pytest tests/test_eval.py
 These tests use synthetic sources only in temporary test files and mock the
 Gemini boundary. Sampling, draft validation, resume, review and metric logic run
 without network calls.
+
+## Retrieval ablation benchmark
+
+```bash
+python -m eval.run_retrieval_eval
+# Evaluate a subset without loading unused dependencies:
+python -m eval.run_retrieval_eval --configs A B C --seed 42
+# Reuse cached analysis and forbid Gemini calls:
+python -m eval.run_retrieval_eval --offline-analysis
+```
+
+`eval/run_retrieval_eval.py` accepts only `reviewed=true, answerable=true` items.
+It refuses an empty eligible set before initializing clients or loading weights.
+The current gold file has no eligible items, so the checked-in
+`results/retrieval_ablation.csv` is header-only and the Markdown report says
+“not run.” They contain no benchmark scores. An empty eligible set or a failed retrieval call does not
+overwrite earlier completed reports.
+
+Every preset uses the same retrieval path and feature switches:
+
+| Preset | Features |
+|---|---|
+| A | Original question, dense search, no act filter or query analysis |
+| B | A plus the primary-act filter from query analysis |
+| C | B plus `build_retrieval_queries` expansion, retaining the original question |
+| D | C plus BAAI/bge-reranker-large, without additive legal boosts |
+| E | D plus the existing legal-boost heuristics |
+| F | E plus graph expansion from the top 10 ranked results |
+
+D and E use identical candidate pools and the existing analysis-enriched rerank
+query; only the additive legal-boost switch differs. F preserves E's ranked list.
+Analysis receives only the question, never the expected IDs, gold act or intent.
+An unknown primary act stays unfiltered, as in the production helper.
+
+`--configs A B ...` selects presets. Individual switches can be overridden with
+`--act-filter/--no-act-filter`, `--multi-query/--no-multi-query`,
+`--rerank/--no-rerank`, `--legal-boost/--no-legal-boost` and
+`--graph/--no-graph`. Legal boost requires reranking. For example:
+
+```bash
+python -m eval.run_retrieval_eval --configs E --no-legal-boost --no-graph
+```
+
+Overrides are recorded in the run manifest and the report's feature table, so a
+customized preset is not mistaken for the default configuration.
+
+`--candidates 50` is both the per-query search limit and the merged candidate
+budget, with a minimum of 10. Multi-query hits are deduplicated by exact chunk ID,
+keeping the highest dense score, then sorted by descending score and chunk ID and
+capped to that common budget before reranking. Thus expansion does not also give
+the reranker an unbounded larger budget. Dense search defaults to Qdrant exact
+search for reproducibility; `--approximate-search` uses production ANN search.
+Production retrieval defaults remain unchanged.
+
+All models are loaded once per run. A needs only the embedder and Qdrant. B–F
+need Gemini credentials only on a cache miss; only D–F load the reranker, and only
+F needs `NEO4J_*`. No Indian Kanoon requests or answer-generation calls are made.
+Use `--collection`, `--embedder-model` and `--reranker-model` to select a frozen
+corpus and pinned/local model snapshots.
+
+### Measures and confidence intervals
+
+The report provides two independent scoring modes:
+
+- **exact**: literal stored chunk ID equality;
+- **root**: section/article identity, e.g. `BSA-115(2)(a)` → `BSA-115`,
+  `BNSS-45-EXPL-1` → `BNSS-45`, and `article_21_clause_1` → `CONST-21`.
+
+Recall@1/5/10 is the fraction of required targets recovered by that rank, macro
+averaged over questions. MRR uses the first relevant result anywhere in the
+retained candidate budget (default depth 50). nDCG@10 uses binary relevance and
+the ideal ranking of the required targets. Repeated exact/root hits retain their
+rank positions but receive credit only once. Root scoring collapses expected
+chunks from the same provision to one target.
+
+A reviewed single-provision alternate may satisfy that target. Flat alternates
+do not specify which required source they replace in a multi-provision question,
+so multi-provision ranking metrics use the canonical expected set only.
+
+For F, **context recall** measures target coverage in actual returned graph nodes.
+**combined context recall** measures coverage in graph nodes plus the top-10
+retrieved chunks. Graph lookup keys, requested seed IDs and IDs merely mentioned
+in source text do not count as returned graph evidence. Exact graph coverage uses
+literal node/chunk IDs; root coverage handles graph/stored-ID format differences.
+Graph columns are blank/dashes for presets that do not run graph expansion.
+
+The default confidence intervals use 2,000 query-level bootstrap resamples and
+the 2.5th/97.5th percentiles. Resample indices are seeded and paired across
+configurations/scoring modes for the same question group. Per-intent intervals
+resample within each observed intent. Singleton groups have degenerate intervals.
+These intervals describe query-sample variation, not model/corpus drift or legal
+answer correctness. Override the count with `--bootstrap-samples`.
+
+### Caching, reproducibility and output
+
+Query analyses are cached under `results/analysis_cache/` (ignored by Git). Keys
+include the exact question, Gemini model, seed, analyser code/prompt fingerprint
+and analysis schema. Cached records are schema-validated; a corrupt cache fails
+instead of silently producing a new analysis. `--refresh-analysis` explicitly
+replaces cached outputs, while `--offline-analysis` requires cache hits. Gold act,
+intent and support labels are never sent to the analyser.
+
+`--seed` seeds Python, NumPy, Torch and CUDA; query analysis uses temperature zero
+and the seed, and its first response is then frozen in the cache. Torch inference
+uses evaluation mode and deterministic algorithms; unsupported deterministic
+operations fail rather than silently falling back. Stable tie-breaking and exact
+dense search avoid dependence on set iteration or ANN ties. Identical reruns still
+require unchanged corpus contents, model revisions, package versions and hardware.
+Freeze the Qdrant/Neo4j data during evaluation. Cached Gemini output cannot make a
+changed corpus or model checkpoint equivalent to an earlier run.
+
+Completed runs write these files under `--output-dir` (default `results`):
+
+- `retrieval_ablation.csv`: macro estimates and separate 95% interval bounds;
+- `retrieval_ablation.md`: the table, feature flags, intent breakdown and worst 10;
+- `retrieval_ablation_by_intent.csv`: the same metrics grouped by observed intent;
+- `retrieval_ablation_worst10.json`: the worst query/configuration pairs with
+  questions, expected/alternate IDs, ranked IDs and graph IDs;
+- `retrieval_ablation_details.jsonl`: per-question retrieval outputs for auditing;
+- `retrieval_ablation_run.json`: seed, gold-file hash, candidate/depth settings,
+  model revisions when available, package versions, feature flags and cache usage.
+
+Worst cases are sorted by ascending root Recall@10, root nDCG@10, exact Recall@10
+and exact nDCG@10, then configuration and item ID. The same question can appear
+under multiple failing configurations. Full Recall@10 with an imperfect nDCG@10
+ranking is also included among failures. No incomplete query run is summarized as
+a completed benchmark.

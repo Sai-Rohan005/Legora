@@ -97,5 +97,8 @@ class EvaluationSettings(ClientSettings):
     gemini_model: str = "gemini-2.5-flash-lite"
     qdrant_url: str | None = None
     qdrant_api_key: SecretStr | None = None
+    neo4j_uri: str | None = None
+    neo4j_username: str | None = None
+    neo4j_password: SecretStr | None = None
     external_timeout_seconds: float = Field(default=30, gt=0, allow_inf_nan=False)
     pass_threshold: float = Field(default=80, ge=0, le=100)

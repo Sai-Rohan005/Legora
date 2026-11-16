@@ -9,9 +9,10 @@ from qdrant_client.models import (
     Filter,
     MatchValue,
     VectorParams,
-    PointStruct
+    PointStruct,
+    SearchParams
 )
-from legora.config import get_settings
+from legora.config import EvaluationSettings, Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,15 @@ class QdrantStore:
 
     def __init__(
         self,
-        collection_name: str = "legal_rag"
-    ):
-        config = get_settings()
+        collection_name: str = "legal_rag",
+        settings: Settings | EvaluationSettings | None = None,
+        exact_search: bool = False
+    ) -> None:
+        """Use shared settings, allowing evaluation without unrelated services."""
+        config = settings or get_settings()
+        if not config.qdrant_url or not config.qdrant_url.strip():
+            raise ValueError("QDRANT_URL is required")
+        self.exact_search = exact_search
         self.collection_name = collection_name
         self.client = QdrantClient(
             url=config.qdrant_url,
@@ -176,6 +183,7 @@ class QdrantStore:
             collection_name=self.collection_name,
             query=query_vector,
             query_filter=q_filter,
+            **({"search_params": SearchParams(exact=True)} if self.exact_search else {}),
             limit=limit
         )
 
@@ -196,6 +204,7 @@ class QdrantStore:
             query=
                 query_vector,
 
+            **({"search_params": SearchParams(exact=True)} if self.exact_search else {}),
             limit=
                 limit
         )

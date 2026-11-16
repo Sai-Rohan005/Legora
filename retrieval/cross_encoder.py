@@ -128,9 +128,10 @@ class LegalReranker:
         query: str,
         points,
         top_k: int = 5,
-        analysis=None
+        analysis=None,
+        apply_legal_boost: bool = True
     ):
-
+        """Rank candidates with optional additive heuristics for controlled ablations."""
         if not points:
             return []
 
@@ -179,10 +180,9 @@ class LegalReranker:
             point_texts
         ):
 
-            final_score = self.legal_boost(
-                score=float(score),
-                text=text,
-                analysis=analysis
+            final_score = (
+                self.legal_boost(score=float(score), text=text, analysis=analysis)
+                if apply_legal_boost else float(score)
             )
 
             ranked.append(

@@ -3,7 +3,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 from typing import List, Optional
-from legora.config import get_settings
+from legora.config import EvaluationSettings, Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +20,11 @@ class LegalQueryAnalysis(BaseModel):
 
 class Analyser:
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Settings | EvaluationSettings | None = None) -> None:
         """Create the analyser with the shared Gemini configuration."""
-        settings = get_settings()
+        settings = settings or get_settings()
+        if not settings.gemini_api_key or not settings.gemini_api_key.get_secret_value().strip():
+            raise ValueError("GEMINI_API_KEY is required for uncached query analysis")
         self.model = settings.gemini_model
         self.client = genai.Client(
             api_key=settings.gemini_api_key.get_secret_value(),
@@ -72,8 +74,8 @@ class Analyser:
         """
 
 
-    def analyze_query(self,query: str) -> LegalQueryAnalysis:
-
+    def analyze_query(self, query: str, seed: int | None = None) -> LegalQueryAnalysis:
+        """Analyze only the query, with an optional seed for cached evaluation runs."""
         response = self.client.models.generate_content(
             model=self.model,
             contents=f"""
@@ -85,7 +87,8 @@ class Analyser:
             config={
                 "response_mime_type": "application/json",
                 "response_schema": LegalQueryAnalysis,
-                "temperature": 0
+                "temperature": 0,
+                **({"seed": seed} if seed is not None else {})
             }
         )
 

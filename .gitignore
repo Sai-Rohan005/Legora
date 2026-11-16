@@ -114,3 +114,6 @@ pnpm-lock.yaml
 /eval/*.lock
 /eval/predictions.jsonl
 /eval/metrics.json
+
+# Cached query analyses contain local query text
+/results/analysis_cache/

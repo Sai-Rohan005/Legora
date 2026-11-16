@@ -4,14 +4,20 @@ import logging
 from builtins import str
 
 from neo4j import GraphDatabase, Query
-from legora.config import get_settings
+from legora.config import EvaluationSettings, Settings, get_settings
 
 logger = logging.getLogger(__name__)
 class Neo4jStore:
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Settings | EvaluationSettings | None = None) -> None:
         """Create a driver from required NEO4J_* environment variables."""
-        config = get_settings()
+        config = settings or get_settings()
+        missing = [name for name, value in (
+            ("NEO4J_URI", config.neo4j_uri), ("NEO4J_USERNAME", config.neo4j_username),
+            ("NEO4J_PASSWORD", config.neo4j_password.get_secret_value() if config.neo4j_password else None),
+        ) if not value or not value.strip()]
+        if missing:
+            raise ValueError("Missing required Neo4j environment variables: " + ", ".join(missing))
         self.timeout = config.external_timeout_seconds
         self.driver = GraphDatabase.driver(
             config.neo4j_uri,
