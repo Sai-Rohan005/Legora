@@ -184,6 +184,33 @@ class LoggingTests(test_audit.ConfiguredTestCase):
         self.assertIsNone(request_id.get())
         self.assertEqual(attempt_number.get(), 0)
 
+    def test_optional_sources_skip_external_calls(self) -> None:
+        """API retrieval controls skip Neo4j and Kanoon and use the supplied k."""
+        pipeline = test_audit.RetryTests().make_pipeline(1, "RETRIEVAL")
+        hybrid = HybridRetriever.__new__(HybridRetriever)
+        hybrid.analyser = Mock()
+        hybrid.analyser.analyze_query.return_value = SimpleNamespace(
+            offence=None, legal_concepts=["theft"], acts=["BNS"]
+        )
+        point = SimpleNamespace(payload={"chunk_id": "BNS-303", "text": "source"}, score=1.0)
+        hybrid.vector_search_filtered = Mock(return_value=[point])
+        hybrid.reranker = Mock()
+        hybrid.reranker.rerank.return_value = [point]
+        hybrid.graph = Mock()
+        retriever = LegalRetriever.__new__(LegalRetriever)
+        retriever.hybrid = hybrid
+        retriever.kanoon = Mock()
+        pipeline.retriever = retriever
+        pipeline.evaluator.evaluate.return_value = {"overall_score": 90}
+        result = pipeline.search("question", top_k=7, include_graph=False, include_judgments=False)
+        hybrid.vector_search_filtered.assert_called_once_with(query="theft", document="bns", k=7)
+        hybrid.graph.run_query.assert_not_called()
+        retriever.kanoon.retrieve.assert_not_called()
+        self.assertEqual(result["retrieval"]["graph_context"], {})
+        self.assertEqual(result["retrieval"]["judgments"], [])
+        self.assertEqual(result["latency_ms"]["graph"], 0)
+        self.assertEqual(set(result["latency_ms"]), {"analysis", "retrieval", "rerank", "graph", "generation", "judge"})
+
     def test_concurrent_queries_have_distinct_contexts(self) -> None:
         """Interleaved workers retain their own IDs and attempt numbers."""
         barrier = Barrier(2)

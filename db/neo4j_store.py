@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from builtins import str
 
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, Query
 from legora.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -12,9 +12,14 @@ class Neo4jStore:
     def __init__(self) -> None:
         """Create a driver from required NEO4J_* environment variables."""
         config = get_settings()
+        self.timeout = config.external_timeout_seconds
         self.driver = GraphDatabase.driver(
             config.neo4j_uri,
-            auth=(config.neo4j_username, config.neo4j_password.get_secret_value())
+            auth=(config.neo4j_username, config.neo4j_password.get_secret_value()),
+            connection_timeout=self.timeout,
+            connection_acquisition_timeout=self.timeout,
+            connection_write_timeout=self.timeout,
+            max_transaction_retry_time=0
         )
 
     # =====================================================
@@ -38,7 +43,7 @@ class Neo4jStore:
         with self.driver.session() as session:
 
             result= session.run(
-                query,
+                Query(query, timeout=self.timeout),
                 parameters or {}
             )
             return list(result)
@@ -325,18 +330,7 @@ class Neo4jStore:
 
     def count_nodes(self):
 
-        with self.driver.session() as session:
-
-            result = session.run(
-                """
-                MATCH (n)
-                RETURN count(n) AS count
-                """
-            )
-
-            record = result.single()
-
-            return record["count"]
+        return self.execute("MATCH (n) RETURN count(n) AS count")[0]["count"]
 
     # =====================================================
     # COUNT RELATIONSHIPS
@@ -344,18 +338,7 @@ class Neo4jStore:
 
     def count_relationships(self):
 
-        with self.driver.session() as session:
-
-            result = session.run(
-                """
-                MATCH ()-[r]->()
-                RETURN count(r) AS count
-                """
-            )
-
-            record = result.single()
-
-            return record["count"]
+        return self.execute("MATCH ()-[r]->() RETURN count(r) AS count")[0]["count"]
 
     # =====================================================
     # LABEL STATS

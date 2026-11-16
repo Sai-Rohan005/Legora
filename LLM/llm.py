@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from google import genai
+from google.genai import types
 from legora.config import get_settings
 
 
@@ -14,7 +15,8 @@ class LegalLLM:
         settings = get_settings()
         self.model = model or settings.gemini_model
         self.client = genai.Client(
-            api_key=api_key or settings.gemini_api_key.get_secret_value()
+            api_key=api_key or settings.gemini_api_key.get_secret_value(),
+            http_options=types.HttpOptions(timeout=int(settings.external_timeout_seconds * 1000), retry_options=types.HttpRetryOptions(attempts=1))
         )
 
     # =====================================================

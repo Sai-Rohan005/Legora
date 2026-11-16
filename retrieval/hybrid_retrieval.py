@@ -223,7 +223,7 @@ class HybridRetriever:
     # HYBRID RETRIEVE
     # =====================================================
 
-    def retrieve(self, query: str, vector_k: int | None = None, rerank_k: int | None = None):
+    def retrieve(self, query: str, vector_k: int | None = None, rerank_k: int | None = None, include_graph: bool = True):
 
         settings = get_settings()
         vector_k = vector_k if vector_k is not None else settings.top_k
@@ -272,9 +272,11 @@ class HybridRetriever:
         node_ids = self.extract_ids(reranked_points)
 
         # Expand graph
-        with log_stage("graph_expansion") as metrics:
-            graph_context = self.expand_graph(node_ids)
-            metrics.candidate_count = len(graph_context)
+        graph_context = {}
+        if include_graph:
+            with log_stage("graph_expansion") as metrics:
+                graph_context = self.expand_graph(node_ids)
+                metrics.candidate_count = len(graph_context)
 
         return {
 

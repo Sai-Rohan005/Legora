@@ -130,7 +130,11 @@ class ConfigurationTests(ConfiguredTestCase):
         """Pass configured values unchanged to the Neo4j driver."""
         with patch.dict(os.environ, TEST_ENV, clear=True), patch("db.neo4j_store.GraphDatabase.driver") as driver:
             Neo4jStore()
-        driver.assert_called_once_with("neo4j://example.invalid", auth=("example-user", "example-secret"))
+        driver.assert_called_once_with(
+            "neo4j://example.invalid", auth=("example-user", "example-secret"),
+            connection_timeout=30, connection_acquisition_timeout=30,
+            connection_write_timeout=30, max_transaction_retry_time=0,
+        )
 
     def test_hybrid_fails_before_loading_models(self) -> None:
         """A configuration error must not trigger expensive model loading."""

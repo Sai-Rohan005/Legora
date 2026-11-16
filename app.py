@@ -1,6 +1,6 @@
 import streamlit as st
 
-from LegalRag.rag_pipeline import RAGPipeline
+from legora.api_client import query_api
 
 
 # =====================================================
@@ -12,18 +12,6 @@ st.set_page_config(
     page_icon="⚖️",
     layout="wide"
 )
-
-# =====================================================
-# LOAD RAG ONCE
-# =====================================================
-
-@st.cache_resource
-def load_rag():
-
-    return RAGPipeline()
-
-
-rag = load_rag()
 
 # =====================================================
 # SESSION STATE
@@ -135,9 +123,7 @@ if query:
             ):
 
                 result = (
-                    rag.search(
-                        query
-                    )
+                    query_api(query)
                 )
 
             answer = (
@@ -147,197 +133,22 @@ if query:
                 )
             )
 
-            retrieval = (
-                result.get(
-                    "retrieval",
-                    {}
-                )
-            )
+            st.markdown(answer)
 
-            st.markdown(
-                answer
-            )
+            with st.expander("📚 Retrieved Sources"):
+                citations = result["citations"]
+                if not citations:
+                    st.info("No sources retrieved.")
+                for citation in citations:
+                    st.write(citation["title"] or citation["id"])
+                    st.caption(f"{citation['source']}: {citation['id']}")
+                    if citation.get("url"):
+                        st.link_button("Open judgment", citation["url"])
+                st.json(result["retrieval_debug"])
 
-            # =====================================================
-            # DEBUG / SOURCES
-            # =====================================================
-
-            with st.expander(
-                "📚 Retrieved Sources"
-            ):
-
-                # -----------------------------------------
-                # Statutory Retrieval
-                # -----------------------------------------
-
-                st.subheader(
-                    "Statutory Retrieval"
-                )
-
-                statutory_results = (
-                    retrieval.get(
-                        "statutory_results",
-                        []
-                    )
-                )
-
-                if statutory_results:
-
-                    for idx, item in enumerate(
-                        statutory_results,
-                        start=1
-                    ):
-
-                        payload = item.payload
-
-                        st.markdown(
-                            f"""
-### Result {idx}
-
-**Document:** {payload.get('document')}
-
-**Chunk ID:** {payload.get('chunk_id')}
-"""
-                        )
-
-                        st.text(
-                            payload.get(
-                                "text",
-                                ""
-                            )[:1500]
-                        )
-
-                        st.divider()
-
-                else:
-
-                    st.info(
-                        "No statutory results."
-                    )
-
-                # -----------------------------------------
-                # Graph Context
-                # -----------------------------------------
-
-                st.subheader(
-                    "Knowledge Graph Context"
-                )
-
-                graph_context = (
-                    retrieval.get(
-                        "graph_context",
-                        {}
-                    )
-                )
-
-                if graph_context:
-
-                    for node_id, graph_data in (
-                        graph_context.items()
-                    ):
-
-                        st.markdown(
-                            f"### {node_id}"
-                        )
-
-                        st.write(
-                            f"Ancestors: {len(graph_data.get('ancestors', []))}"
-                        )
-
-                        st.write(
-                            f"Children: {len(graph_data.get('children', []))}"
-                        )
-
-                        st.write(
-                            f"References: {len(graph_data.get('references', []))}"
-                        )
-
-                        st.divider()
-
-                else:
-
-                    st.info(
-                        "No graph context."
-                    )
-
-                # -----------------------------------------
-                # Judgments
-                # -----------------------------------------
-
-                st.subheader(
-                    "Judgments"
-                )
-
-                judgments = (
-                    retrieval.get(
-                        "judgments",
-                        []
-                    )
-                )
-
-                if judgments:
-
-                    for idx, judgment in enumerate(
-                        judgments,
-                        start=1
-                    ):
-
-                        st.markdown(
-                            f"### Judgment {idx}"
-                        )
-
-                        if isinstance(
-                            judgment,
-                            dict
-                        ):
-
-                            title = (
-                                judgment.get(
-                                    "title"
-                                )
-                                or
-                                judgment.get(
-                                    "docsource"
-                                )
-                                or
-                                "Unknown Judgment"
-                            )
-
-                            st.write(
-                                title
-                            )
-
-                            st.text(
-                                str(
-                                    judgment
-                                )[:3000]
-                            )
-
-                        else:
-
-                            st.text(
-                                str(
-                                    judgment
-                                )[:3000]
-                            )
-
-                        st.divider()
-
-                else:
-
-                    st.info(
-                        "No judgments retrieved."
-                    )
-
-        except Exception as e:
-
-            st.error(
-                f"Error: {str(e)}"
-            )
-
-            answer = (
-                f"System Error:\n\n{str(e)}"
-            )
+        except (RuntimeError, ValueError) as error:
+            answer = str(error)
+            st.error(answer)
 
     # -----------------------------------------
     # Save Assistant Response

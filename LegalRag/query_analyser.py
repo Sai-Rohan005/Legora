@@ -1,5 +1,6 @@
 import logging
 from google import genai
+from google.genai import types
 from pydantic import BaseModel
 from typing import List, Optional
 from legora.config import get_settings
@@ -23,7 +24,10 @@ class Analyser:
         """Create the analyser with the shared Gemini configuration."""
         settings = get_settings()
         self.model = settings.gemini_model
-        self.client = genai.Client(api_key=settings.gemini_api_key.get_secret_value())
+        self.client = genai.Client(
+            api_key=settings.gemini_api_key.get_secret_value(),
+            http_options=types.HttpOptions(timeout=int(settings.external_timeout_seconds * 1000), retry_options=types.HttpRetryOptions(attempts=1))
+        )
         self.SYSTEM_PROMPT = """
         You are an expert Indian legal query analyzer.
 

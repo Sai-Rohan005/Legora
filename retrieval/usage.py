@@ -103,18 +103,22 @@ References:
             vector_k = kwargs['top_k']
 
         # Forward only options supported by each retriever.
+        graph_options = {} if kwargs.get("include_graph", True) else {"include_graph": False}
         hybrid_result = self.hybrid.retrieve(
             query=query,
             vector_k=vector_k,
-            rerank_k=rerank_k
+            rerank_k=rerank_k,
+            **graph_options
         )
 
-        with log_stage("judgments") as metrics:
-            judgments = self.kanoon.retrieve(
-                query=query,
-                top_k=judgment_k
-            )
-            metrics.candidate_count = len(judgments)
+        judgments = []
+        if kwargs.get("include_judgments", True):
+            with log_stage("judgments") as metrics:
+                judgments = self.kanoon.retrieve(
+                    query=query,
+                    top_k=judgment_k
+                )
+                metrics.candidate_count = len(judgments)
 
         final_context = self.build_context(
             hybrid_result,
@@ -125,6 +129,8 @@ References:
         return {
             "query": query,
             "statutory_results": hybrid_result["reranked_results"],
+            "vector_results": hybrid_result.get("vector_results", []),
+            "node_ids": hybrid_result.get("node_ids", []),
             "graph_context": hybrid_result["graph_context"],
             "judgments": judgments,
             "final_context": final_context

@@ -3,6 +3,7 @@ import logging
 from legora.config import get_settings
 
 from google import genai
+from google.genai import types
 
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,8 @@ class LegalQueryRewriter:
 
         self.model = get_settings().gemini_model
         self.client = genai.Client(
-            api_key=api_key
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=int(get_settings().external_timeout_seconds * 1000), retry_options=types.HttpRetryOptions(attempts=1))
         )
 
     def rewrite(
@@ -77,9 +79,11 @@ class KanoonClient:
             headers=self.headers,
             data={
                 "formInput": query
-            }
+            },
+            timeout=get_settings().external_timeout_seconds
         )
 
+        response.raise_for_status()
         return response.json()
 
     def get_document(
@@ -93,9 +97,11 @@ class KanoonClient:
 
         response = requests.get(
             url,
-            headers=self.headers
+            headers=self.headers,
+            timeout=get_settings().external_timeout_seconds
         )
 
+        response.raise_for_status()
         return response.json()
     
 
@@ -115,11 +121,8 @@ class KanoonClient:
             if not doc_id:
                 continue
 
-            try:
-                full_doc = self.get_document(doc_id)
-                judgments.append(full_doc)
-
-            except Exception:
-                logger.warning("Failed to fetch judgment %s", doc_id)
+            full_doc = self.get_document(doc_id)
+            full_doc.setdefault("tid", str(doc_id))
+            judgments.append(full_doc)
 
         return judgments

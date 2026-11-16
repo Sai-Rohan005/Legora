@@ -4,7 +4,7 @@ from evaluator.LLM_evaluator import LegalLLMEvaluator
 
 import logging
 from legora.config import get_settings
-from legora.logging import attempt_number, log_stage, query_context, setup_logging
+from legora.logging import attempt_number, log_stage, query_context, setup_logging, stage_timings
 
 logger = logging.getLogger(__name__)
 
@@ -119,24 +119,44 @@ class RAGPipeline:
     # ------------------------------------------------------------------
     # Main Search with Retry Loop
     # ------------------------------------------------------------------
-    def search(self, query: str) -> dict:
+    def search(
+        self, query: str, top_k: int | None = None,
+        include_graph: bool = True, include_judgments: bool = True
+    ) -> dict:
         """Run one query under a unique request ID, restoring context on exit."""
         with query_context():
             with log_stage("query") as metrics:
-                result = self._search(query)
+                result = self._search(query, top_k, include_graph, include_judgments)
                 retrieval = result.get("retrieval") or {}
                 metrics.candidate_count = (
                     len(retrieval.get("statutory_results", []))
                     + len(retrieval.get("judgments", []))
                 )
+                timings = stage_timings.get() or {}
+                result["latency_ms"] = {
+                    "analysis": round(timings.get("query_analysis", 0), 3),
+                    "retrieval": round(timings.get("vector_search", 0) + timings.get("judgments", 0), 3),
+                    "rerank": round(timings.get("reranking", 0), 3),
+                    "graph": round(timings.get("graph_expansion", 0), 3),
+                    "generation": round(timings.get("generation", 0), 3),
+                    "judge": round(timings.get("evaluation", 0), 3),
+                }
                 return result
 
-    def _search(self, query: str) -> dict:
+    def _search(
+        self, query: str, top_k: int | None, include_graph: bool, include_judgments: bool
+    ) -> dict:
         """Execute the generate/evaluate/retry loop within the query context."""
         self.attempt = 0
         self.current_query = query   # start with original
         self.retrieval_kwargs.clear()
         self.generation_kwargs.clear()
+        if top_k is not None:
+            self.retrieval_kwargs["top_k"] = top_k
+        if not include_graph:
+            self.retrieval_kwargs["include_graph"] = False
+        if not include_judgments:
+            self.retrieval_kwargs["include_judgments"] = False
 
         last_retrieval = None
         last_answer = None
@@ -193,3 +213,12 @@ class RAGPipeline:
             "status": "FAIL",
             "attempts": self.attempt
         }
+
+    def close(self) -> None:
+        """Release the clients owned by the startup-loaded pipeline."""
+        self.retriever.hybrid.graph.close()
+        self.retriever.hybrid.vector_db.client.close()
+        self.retriever.hybrid.analyser.client.close()
+        self.retriever.kanoon.rewriter.client.close()
+        self.llm.client.close()
+        self.evaluator.client.close()

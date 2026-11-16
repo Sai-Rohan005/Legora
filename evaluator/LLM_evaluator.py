@@ -49,7 +49,8 @@ class LegalLLMEvaluator:
         self.api_key = api_key or settings.gemini_api_key.get_secret_value()
 
         self.client = genai.Client(
-            api_key=self.api_key
+            api_key=self.api_key,
+            http_options=types.HttpOptions(timeout=int(settings.external_timeout_seconds * 1000), retry_options=types.HttpRetryOptions(attempts=1))
         )
 
         self.model = model or settings.gemini_model

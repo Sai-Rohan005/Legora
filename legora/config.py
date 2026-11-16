@@ -7,8 +7,8 @@ from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
-    """Read case-insensitive environment variables before the project .env file."""
+class ClientSettings(BaseSettings):
+    """Configure the HTTP UI without requiring backend service credentials."""
 
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[1] / ".env",
@@ -19,6 +19,16 @@ class Settings(BaseSettings):
         hide_input_in_errors=True,
         frozen=True,
     )
+
+    api_base_url: str = Field(default="http://127.0.0.1:8000", min_length=1)
+    api_timeout_seconds: float = Field(default=180, gt=0, allow_inf_nan=False)
+
+
+class Settings(ClientSettings):
+    """Read and validate all backend environment configuration."""
+
+    external_timeout_seconds: float = Field(default=30, gt=0, allow_inf_nan=False)
+    query_lock_timeout_seconds: float = Field(default=180, gt=0, allow_inf_nan=False)
 
     gemini_api_key: SecretStr
     gemini_model: str = Field(default="gemini-2.5-flash-lite", min_length=1)
@@ -72,3 +82,9 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return the process-wide settings; restart the app after env changes."""
     return Settings()
+
+
+@lru_cache(maxsize=1)
+def get_client_settings() -> ClientSettings:
+    """Load UI connection settings independently of backend credentials."""
+    return ClientSettings()

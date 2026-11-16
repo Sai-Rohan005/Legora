@@ -12,6 +12,7 @@ from uuid import uuid4
 
 request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 attempt_number: ContextVar[int] = ContextVar("attempt_number", default=0)
+stage_timings: ContextVar[dict[str, float] | None] = ContextVar("stage_timings", default=None)
 logger = logging.getLogger(__name__)
 
 
@@ -54,9 +55,11 @@ def query_context() -> Iterator[str]:
     identifier = uuid4().hex
     request_token = request_id.set(identifier)
     attempt_token = attempt_number.set(0)
+    timing_token = stage_timings.set({})
     try:
         yield identifier
     finally:
+        stage_timings.reset(timing_token)
         attempt_number.reset(attempt_token)
         request_id.reset(request_token)
 
@@ -82,12 +85,16 @@ def log_stage(name: str, candidate_count: int | None = None) -> Iterator[StageMe
         error_type = type(error).__name__
         raise
     finally:
+        elapsed = (perf_counter() - started) * 1000
+        timings = stage_timings.get()
+        if timings is not None:
+            timings[name] = timings.get(name, 0.0) + elapsed
         logger.log(
             logging.ERROR if status == "error" else logging.INFO,
             "Stage completed",
             extra={
                 "stage": name,
-                "latency_ms": round((perf_counter() - started) * 1000, 3),
+                "latency_ms": round(elapsed, 3),
                 "candidate_count": metrics.candidate_count,
                 "status": status,
                 "error_type": error_type,

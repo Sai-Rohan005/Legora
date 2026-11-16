@@ -28,6 +28,7 @@ class QdrantStore:
         self.client = QdrantClient(
             url=config.qdrant_url,
             api_key=config.qdrant_api_key.get_secret_value() if config.qdrant_api_key else None,
+            timeout=config.external_timeout_seconds,
             check_compatibility=False
         )
 
