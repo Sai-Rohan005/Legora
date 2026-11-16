@@ -146,7 +146,7 @@ class RAGPipeline:
     def _search(
         self, query: str, top_k: int | None, include_graph: bool, include_judgments: bool
     ) -> dict:
-        """Execute the generate/evaluate/retry loop within the query context."""
+        """Retry within the query context, retaining the first highest-scoring attempt."""
         self.attempt = 0
         self.current_query = query   # start with original
         self.retrieval_kwargs.clear()
@@ -158,9 +158,8 @@ class RAGPipeline:
         if not include_judgments:
             self.retrieval_kwargs["include_judgments"] = False
 
-        last_retrieval = None
-        last_answer = None
-        last_eval = None
+        best_result: dict = {}
+        best_score = float("-inf")
 
         while self.attempt < self.max_attempts:
             self.attempt += 1
@@ -171,21 +170,27 @@ class RAGPipeline:
             with log_stage("retrieval") as metrics:
                 retrieval_result = self.get_context()
                 metrics.candidate_count = len(retrieval_result.get("statutory_results", [])) + len(retrieval_result.get("judgments", []))
-            last_retrieval = retrieval_result
             context = retrieval_result.get("final_context", "")
 
             # 2. Generate (uses self.current_query + generation_kwargs)
             with log_stage("generation", metrics.candidate_count):
                 answer = self.get_llm_result(context)
-            last_answer = answer
 
             # 3. Evaluate
             with log_stage("evaluation", metrics.candidate_count):
                 evaluation = self.evaluate(answer, retrieval_result)
-            last_eval = evaluation
 
             # 4. Decide
             decision = self.decide(evaluation)
+            score = evaluation.get("overall_score", 0)
+            if score > best_score:
+                best_score = score
+                best_result = {
+                    "query": self.current_query,
+                    "answer": answer,
+                    "retrieval": retrieval_result,
+                    "evaluation": evaluation,
+                }
 
             if decision["status"] == "PASS":
                 logger.info("Answer passed evaluation")
@@ -206,10 +211,7 @@ class RAGPipeline:
         # Exhausted
         logger.warning("All %s attempts failed evaluation", self.max_attempts)
         return {
-            "query": self.current_query,
-            "answer": last_answer,
-            "retrieval": last_retrieval,
-            "evaluation": last_eval,
+            **best_result,
             "status": "FAIL",
             "attempts": self.attempt
         }

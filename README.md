@@ -111,13 +111,15 @@ curl -X POST http://127.0.0.1:8000/query -H 'Content-Type: application/json' \
 ```
 
 The response contains `answer`, `citations`, `retrieval_debug` (`vector_hits`
-and `reranked` counts plus `node_ids` from the final attempt), `evaluation`
+and `reranked` counts plus `node_ids` from the returned attempt), `evaluation`
 (`score`, `stage`), `attempts`, and `latency_ms` (`analysis`, `retrieval`,
 `rerank`, `graph`, `generation`, `judge`). Citations identify retained retrieval
 sources. Timings are measured and summed across retries: retrieval covers vector
 search plus judgment retrieval; analysis, reranking, graph, generation, and judging
 are separate. Skipped stages have zero duration. Exhausted evaluation retries
-return the last answer, score, and failure stage.
+return the highest-scoring complete attempt with its matching query, sources,
+score, and failure stage. Equal scores retain the earlier attempt; `attempts`
+still reports the total number executed.
 
 `GET /health` probes Qdrant collections, a Neo4j `RETURN 1` query, and Gemini
 model metadata using the startup clients. It returns status and measured latency
@@ -135,6 +137,25 @@ Invalid request bodies return 422. Backend failures, upstream timeouts, and
 expired queue waits return 502 with generic messages. No raw SDK errors, API
 keys, graph objects, or stack traces appear in API error responses.
 
-Run tests with `python -m pytest`. Tests use FastAPI TestClient and mocked
-pipelines/SDK clients, including startup lifecycle, validation, optional sources,
-health failures/timeouts, serialization, and Streamlit HTTP client behavior.
+Run the offline suite and coverage report with:
+
+```bash
+make test
+# Or choose an interpreter explicitly:
+make test PYTHON=python3
+```
+
+The target uses `venv/bin/python` when present, runs pytest-cov with branch
+coverage, and writes `coverage/html/index.html` and `coverage/coverage.json`.
+`python -m pytest` runs the same suite without generating coverage reports.
+Coverage is scoped to the four parser packages, hybrid retrieval, reranking,
+and the RAG pipeline; ingestion clients and executable examples are excluded.
+There is no artificially imposed coverage threshold.
+
+The suite blocks socket connections and DNS lookups and forces Hugging Face
+into offline mode. Models and service clients are replaced only at their
+boundaries; parser, chunking, root extraction, deduplication, boosting, and retry
+logic run unchanged by mocks. Structural statute fixtures are abridged test text,
+with explicit test-only connector sentences, rather than authoritative statutes.
+Tests also cover FastAPI TestClient lifecycle/validation, dependency timeouts,
+query serialization, and Streamlit HTTP behavior.

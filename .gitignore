@@ -89,6 +89,8 @@ obj/
 
 # Coverage reports
 coverage/
+.coverage
+.coverage.*
 *.lcov
 
 # Lock files (optional, depends on project)

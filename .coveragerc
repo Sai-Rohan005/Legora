@@ -1,0 +1,20 @@
+[run]
+branch = True
+source =
+    db.parsers
+    retrieval.hybrid_retrieval
+    retrieval.cross_encoder
+    LegalRag.rag_pipeline
+# The requested parser scope excludes ingestion clients and runnable examples.
+omit =
+    */usage.py
+    */ingest.py
+    */search.py
+    */qdrant_store.py
+    */embedder.py
+    */embeddings_test.py
+
+[report]
+show_missing = True
+exclude_also =
+    if __name__ == .__main__.:

@@ -46,7 +46,8 @@ class HybridRetriever:
     # ROOT EXTRACTION (FIXED)
     # =====================================================
 
-    def extract_ids(self, points):
+    def extract_ids(self, points) -> list[str]:
+        """Map current and legacy chunk identifiers to unique graph root IDs."""
 
         ids = set()
 
@@ -64,7 +65,10 @@ class HybridRetriever:
             # BNSS-45
             # CONST-21(PROVISO-1)
 
-            root_id = chunk_id.split("(")[0].split("-EXPL")[0].split("-ILL")[0]
+            if chunk_id.startswith("article_"):
+                root_id = f"CONST-{chunk_id.split('_')[1]}"
+            else:
+                root_id = chunk_id.split("(")[0].split("-EXP")[0].split("-ILL")[0]
 
             ids.add(root_id)
 
@@ -157,6 +161,7 @@ class HybridRetriever:
             dict.fromkeys(
                 q.lower().strip()
                 for q in queries
+                if q.strip()
             )
         )
         
@@ -208,7 +213,7 @@ class HybridRetriever:
         if not analysis.acts:
             return None
 
-        act = analysis.acts[0].lower()
+        act = analysis.acts[0].strip().lower()
 
         mapping = {
             "bns": "bns",
