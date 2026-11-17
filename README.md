@@ -65,19 +65,18 @@ returns `unsupported_citations`, `citation_precision` and per-mention
 
 The source of this table is [results/corpus_stats.md](results/corpus_stats.md),
 with machine-readable provenance in [corpus_stats.json](results/corpus_stats.json).
-The read-only [counting script](scripts/corpus_stats.py) attempted live storage
-reads. Qdrant reported `ResponseHandlingException`; Neo4j reported `ValueError`.
-Both were unavailable. These failures do **not** establish an empty corpus.
-Rows identify the intended acts; their stored coverage is unverified.
+The read-only [counting script](scripts/corpus_stats.py) completed live storage
+reads at the timestamp recorded in that report. Both dependencies reported OK.
+These are stored record counts, not proof of complete or current statute coverage.
 
 | Act | Unique stored chunks | Graph nodes | Directed graph edges |
 |---|---:|---:|---:|
-| BNS | Not measured | Not measured | Not measured |
-| BNSS | Not measured | Not measured | Not measured |
-| BSA | Not measured | Not measured | Not measured |
-| Constitution | Not measured | Not measured | Not measured |
-| Unmapped | Not measured | Not measured | Not measured |
-| Total | Not measured | Not measured | Not measured |
+| BNS | 1025 | 1046 | 2090 |
+| BNSS | 1694 | 1734 | 1733 |
+| BSA | 556 | 569 | 568 |
+| Constitution | 1569 | 1578 | 1594 |
+| Unmapped | 0 | 0 | 0 |
+| Total | 4844 | 4927 | 5985 |
 
 Chunk counts deduplicate actual stored `chunk_id` values. The JSON also reports
 raw points, duplicate chunk points and points without IDs when storage is readable.
@@ -133,8 +132,8 @@ These are citation/coverage/scope measures, not a legal correctness guarantee.
 
 ### Latency and quality trade-offs
 
-Source: [latency.md](results/latency.md): no paired measurements. The planned
-comparison requires restored stores and reviewed gold questions.
+Source: [latency.md](results/latency.md): no paired measurements. Stores are now
+populated; reviewed gold questions are still required for the planned comparison.
 
 | Stage | Before p50 / p95 (ms) | After cold p50 / p95 (ms) | After warm p50 / p95 (ms) |
 |---|---|---|---|
@@ -185,7 +184,8 @@ agreement or consistency report.
 
 **What did not help:** the reports contain no completed comparison from which
 an unsuccessful algorithmic experiment can be identified. Evaluation attempts
-stopped at missing reviewed labels/storage, as their status reports document.
+stopped before measurement, as their status reports document. Storage is now
+available, but reviewed labels are still missing.
 Those are setup blockers, not evidence that BM25, graph expansion, reranking,
 legal boosts or caching failed. Claiming negative or positive findings would
 invent results. Judge skipping is unavailable: enabling its flag fails fast
@@ -195,8 +195,8 @@ until a reviewed comparison establishes no quality loss.
 
 - **Not legal advice; no human lawyer validation is documented.** Obtain qualified
   legal review before considering real-world use.
-- Stored corpus size, completeness, amendment currency and provision coverage
-  are unverified. Named acts do not imply that every provision was ingested.
+- Stored record counts are measured above; completeness, amendment currency and
+  provision coverage remain unverified. Named acts do not imply that every provision was ingested.
   State laws, other central statutes and the full body of case law are not a
   demonstrated coverage claim. Indian Kanoon access is on-demand.
 - PDF/OCR layout can lose numbering, boundaries, provisos or explanations.
@@ -260,6 +260,17 @@ there is no automatic silent OCR. Inspect numbering and contents-page/layout
 artifacts. Record source URL, edition/amendment date and download date locally.
 Successful parsing does not prove complete statute coverage. Do not commit
 copyrighted PDFs or annotated commercial editions.
+
+The ingestion adapter removes recognized Constitution editorial footnote blocks
+before parsing. Constitution schedules are parsed separately from articles;
+amendment appendices are excluded. BNSS/BSA schedules currently lack a dedicated
+ingestion path and are excluded with a warning, rather than attached to the last
+section. When child parsing produces conflicting IDs, ingestion retains that
+entire section/article as one chunk and omits its ambiguous children from both
+stores, with a warning. Full parent text is preserved, but exact child-ID coverage
+is reduced for those provisions. Use `--strict-children` to reject that fallback.
+Duplicate root provisions and empty chunks still fail validation. Review these
+warnings and re-evaluate retrieval quality before relying on the resulting corpus.
 
 ### Environment variables
 

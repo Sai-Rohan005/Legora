@@ -1,52 +1,75 @@
 {
-  "measured_at_utc": "2026-11-17T03:06:41.993006+00:00",
+  "measured_at_utc": "2026-11-17T10:58:48.496307+00:00",
   "collection": "legal_rag",
-  "status": "unavailable",
+  "status": "completed",
   "dependencies": {
     "qdrant": {
-      "status": "unavailable",
-      "error_type": "ResponseHandlingException"
+      "status": "ok",
+      "chunks_by_act": {
+        "BNS": 1025,
+        "BNSS": 1694,
+        "BSA": 556,
+        "Constitution": 1569,
+        "Unmapped": 0
+      },
+      "stored_points": 4844,
+      "unique_chunks": 4844,
+      "points_without_chunk_id": 0,
+      "duplicate_chunk_points": 0
     },
     "neo4j": {
-      "status": "unavailable",
-      "error_type": "ValueError"
+      "status": "ok",
+      "nodes_by_act": {
+        "BNS": 1046,
+        "BNSS": 1734,
+        "BSA": 569,
+        "Constitution": 1578,
+        "Unmapped": 0
+      },
+      "edges_by_act": {
+        "BNS": 2090,
+        "BNSS": 1733,
+        "BSA": 568,
+        "Constitution": 1594,
+        "Unmapped": 0
+      }
     }
   },
   "acts": [
     {
       "act": "BNS",
-      "chunks": null,
-      "graph_nodes": null,
-      "graph_edges": null
+      "chunks": 1025,
+      "graph_nodes": 1046,
+      "graph_edges": 2090
     },
     {
       "act": "BNSS",
-      "chunks": null,
-      "graph_nodes": null,
-      "graph_edges": null
+      "chunks": 1694,
+      "graph_nodes": 1734,
+      "graph_edges": 1733
     },
     {
       "act": "BSA",
-      "chunks": null,
-      "graph_nodes": null,
-      "graph_edges": null
+      "chunks": 556,
+      "graph_nodes": 569,
+      "graph_edges": 568
     },
     {
       "act": "Constitution",
-      "chunks": null,
-      "graph_nodes": null,
-      "graph_edges": null
+      "chunks": 1569,
+      "graph_nodes": 1578,
+      "graph_edges": 1594
     },
     {
       "act": "Unmapped",
-      "chunks": null,
-      "graph_nodes": null,
-      "graph_edges": null
+      "chunks": 0,
+      "graph_nodes": 0,
+      "graph_edges": 0
     }
   ],
   "totals": {
-    "chunks": null,
-    "graph_nodes": null,
-    "graph_edges": null
+    "chunks": 4844,
+    "graph_nodes": 4927,
+    "graph_edges": 5985
   }
 }

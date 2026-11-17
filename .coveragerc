@@ -7,10 +7,13 @@ source =
     LegalRag.rag_pipeline
     LegalRag.citation_check
     eval.run_answer_eval
+    eval.generate
+    eval.review
     eval.judge_validation
     eval.profile_pipeline
     legora.performance
     scripts.ingest
+    scripts.statute_layout
     scripts.corpus_stats
 # The requested parser scope excludes ingestion clients and runnable examples.
 omit =

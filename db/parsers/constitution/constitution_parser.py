@@ -386,6 +386,12 @@ class ConstitutionParser:
         )
         raw_text = self.clean_constitution_text(raw_text)
         raw_text = self.remove_footnotes(raw_text)
+        # Schedules and amendment appendices are not articles in the final Part.
+        appendix = re.search(r"(?im)^APPENDIX\s+[IVXLCDM]+\s*$", raw_text)
+        if appendix:
+            raw_text = raw_text[:appendix.start()]
+        first_schedule = self.schedule_parser.SCHEDULE_RE.search(raw_text)
+        article_text = raw_text[:first_schedule.start()] if first_schedule else raw_text
 
         document = (
             ConstitutionDocument(
@@ -398,7 +404,7 @@ class ConstitutionParser:
 
         document.preamble = (
             self.extract_preamble(
-                raw_text
+                article_text
             )
         )
 
@@ -407,7 +413,7 @@ class ConstitutionParser:
         parts = (
             self.part_parser
             .extract_parts(
-                raw_text
+                article_text
             )
         )
 

@@ -194,6 +194,11 @@ class ArticleParser:
                 text
             )
         )
+        # Editorial notes may continue across a page without a footer separator.
+        # Filter them before computing article boundaries, not after slicing text.
+        matches = [match for match in matches if not match.group(2).startswith(
+            ("Subs.", "Ins.", "Omitted", "Added", "Inserted", "In exercise of")
+        )]
 
         if not matches:
             return []

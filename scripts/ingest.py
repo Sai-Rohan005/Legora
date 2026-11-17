@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from legora.logging import setup_logging
+from scripts.statute_layout import prepare_source
 
 logger = logging.getLogger(__name__)
 STATUTES = {"bns": "BNS", "bnss": "BNSS", "bsa": "BSA", "constitution": "Constitution"}
@@ -23,6 +25,41 @@ class ParsedStatute:
     name: str
     document: Any
     chunks: list[dict[str, Any]]
+
+
+def provision_root(identifier: str) -> str:
+    """Identify the owning section/article without assigning new legal child labels."""
+    if identifier.startswith("article_"):
+        return "_".join(identifier.split("_")[:2])
+    return identifier.split("(", 1)[0].split("-EXP", 1)[0].split("-ILL", 1)[0]
+
+
+def collapse_ambiguous_children(document: Any, chunks: list[dict[str, Any]], name: str,
+                                strict: bool = False) -> bool:
+    """Retain full parent text when child parsers generate conflicting legal identities."""
+    counts = Counter(chunk["chunk_id"] for chunk in chunks)
+    duplicates = {identifier for identifier, count in counts.items() if count > 1}
+    for identifier in duplicates:
+        if identifier == provision_root(identifier):
+            raise ValueError(f"Duplicate root provision {identifier}; inspect source headings/footnotes")
+    affected = {provision_root(identifier) for identifier in duplicates}
+    if not affected:
+        return False
+    if strict:
+        raise ValueError(f"Ambiguous child IDs for {name}: {', '.join(sorted(duplicates))}")
+    if name == "constitution":
+        provisions = [article for part in document.parts for article in [*part.articles, *(article for chapter in part.chapters for article in chapter.articles)]]
+    else:
+        provisions = [section for chapter in document.chapters for section in chapter.sections]
+    for provision in provisions:
+        root = f"article_{provision.article_no}" if name == "constitution" else f"{STATUTES[name]}-{provision.section_no}"
+        if root in affected:
+            for field in ("clauses", "explanations", "illustrations", "provisos", "roman_clauses", "sub_clauses"):
+                children = getattr(provision, field, None)
+                if children is not None:
+                    children.clear()
+            logger.warning("%s: ambiguous child IDs; indexing full provision only in both stores", root)
+    return True
 
 
 def source_text(directory: Path, name: str) -> str:
@@ -45,23 +82,29 @@ def source_text(directory: Path, name: str) -> str:
     return text
 
 
-def prepare_corpus(directory: Path) -> list[ParsedStatute]:
+def prepare_corpus(directory: Path, strict_children: bool = False) -> list[ParsedStatute]:
     """Parse all inputs and reject empty/duplicate chunks before opening any service client."""
     texts = {name: source_text(directory, name) for name in STATUTES}
     prepared, seen = [], set()
     for name, prefix in STATUTES.items():
         cleaner = getattr(import_module(f"db.parsers.{name}.cleaner"), f"{prefix}TextCleaner")()
         parser = getattr(import_module(f"db.parsers.{name}.{name}_parser"), f"{prefix}Parser")()
-        document = parser.parse(cleaner.clean(texts[name]))
+        document = parser.parse(cleaner.clean(prepare_source(name, texts[name])))
         module = import_module(f"db.parsers.{name}.chunker")
         chunker = module.LegalChunker()
         chunks = module.chunks_to_dicts(chunker.chunk_constitution(document) if name == "constitution" else chunker.chunk_document(document))
+        if collapse_ambiguous_children(document, chunks, name, strict_children):
+            chunks = module.chunks_to_dicts(chunker.chunk_constitution(document) if name == "constitution" else chunker.chunk_document(document))
         if not chunks:
             raise ValueError(f"No provisions parsed for {name}; inspect PDF layout or supply reviewed text")
         for chunk in chunks:
             identifier = chunk.get("chunk_id")
-            if not identifier or identifier in seen or not chunk.get("text", "").strip():
-                raise ValueError(f"Invalid or duplicate chunks for {name}")
+            if not identifier:
+                raise ValueError(f"Missing chunk ID for {name}")
+            if identifier in seen:
+                raise ValueError(f"Duplicate chunk ID {identifier}")
+            if not chunk.get("text", "").strip():
+                raise ValueError(f"Empty text for chunk {identifier}")
             seen.add(identifier)
         prepared.append(ParsedStatute(name, document, chunks))
         logger.info("Validated %s: %s chunks", name, len(chunks))
@@ -98,13 +141,14 @@ def main() -> None:
     parser.add_argument("--data-dir", type=Path, default=Path("data/statutes"))
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--strict-children", action="store_true", help="Reject ambiguous child IDs instead of retaining the full parent only")
     args = parser.parse_args()
     setup_logging()
     vectors = graph = None
     try:
         if args.batch_size < 1:
             raise ValueError("batch_size must be positive")
-        corpus = prepare_corpus(args.data_dir)
+        corpus = prepare_corpus(args.data_dir, strict_children=args.strict_children)
         if args.check_only:
             return
         from db.embedder import LegalEmbedder

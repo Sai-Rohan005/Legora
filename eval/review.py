@@ -32,11 +32,12 @@ def show_item(item: GoldItem) -> None:
     print("Notes:", item.notes)
 
 
-def interactive_review(path: Path, catalog: dict[str, Provision]) -> None:
+def interactive_review(path: Path, catalog: dict[str, Provision], answerable_only: bool = False) -> None:
     """Review pending records one at a time; every edit is saved atomically."""
     skipped: set[str] = set()
     while True:
-        pending = [item for item in load_gold(path) if not item.reviewed and item.id not in skipped]
+        pending = [item for item in load_gold(path) if not item.reviewed and item.id not in skipped
+                   and (not answerable_only or item.answerable)]
         if not pending:
             print("No more pending items in this session.")
             return
@@ -76,6 +77,7 @@ def main() -> None:
     parser.add_argument("--gold", type=Path, default=Path("eval/gold.jsonl"))
     parser.add_argument("--catalog", type=Path, default=Path("eval/provisions.jsonl"))
     parser.add_argument("--list", action="store_true", help="List IDs and approval state")
+    parser.add_argument("--answerable-only", action="store_true", help="Review only legal questions; leave out-of-scope records unchanged")
     parser.add_argument("--id", help="Inspect/edit one item instead of entering interactive mode")
     parser.add_argument("--expected", nargs="+", help="Replace expected supporting IDs")
     parser.add_argument("--alternates", nargs="*", help="Replace acceptable alternate IDs")
@@ -86,6 +88,8 @@ def main() -> None:
     args = parser.parse_args()
     try:
         items = load_gold(args.gold)
+        if args.answerable_only:
+            items = [item for item in items if item.answerable]
         catalog = load_catalog(args.catalog) if args.catalog.exists() else {}
         if args.list:
             for item in items:
@@ -111,7 +115,7 @@ def main() -> None:
         else:
             if args.approve or args.expected or args.alternates is not None or args.question or args.notes or args.intent:
                 parser.error("Noninteractive edits require --id")
-            interactive_review(args.gold, catalog)
+            interactive_review(args.gold, catalog, answerable_only=args.answerable_only)
     except (ValueError, OSError):
         parser.exit(1, "Review failed: check the file, item ID, label schema, and source snapshot.\n")
 

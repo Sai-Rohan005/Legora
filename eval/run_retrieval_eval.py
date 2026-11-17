@@ -401,7 +401,7 @@ def main() -> None:
                             content += f"| {configuration.name} | {configuration.bm25} | {configuration.exact_id_lookup} | Not evaluated | Not evaluated |\n"
                         content += "\nBM25 remains disabled by default pending reviewed Recall@5/MRR evidence.\n"
                     atomic_text(path, content)
-            parser.exit(1, "Not run: no reviewed, answerable gold items. Review labels and restore the corpus first.\n")
+            parser.exit(1, "Not run: no reviewed, answerable gold items. Approve supporting labels with eval.review before evaluating.\n")
         settings = EvaluationSettings()
 
         def analyse(question: str) -> LegalQueryAnalysis:

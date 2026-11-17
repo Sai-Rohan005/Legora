@@ -4,11 +4,13 @@ import argparse
 import hashlib
 import json
 import random
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
 from google import genai
+from google.genai.errors import APIError
 from google.genai import types
 
 from eval.models import ACTS, INTENTS, Draft, GoldItem, Provision
@@ -28,14 +30,29 @@ class DraftGenerationError(RuntimeError):
     """A safe progress error containing no provider response text."""
 
 
+def provider_failure(error: APIError) -> str:
+    """Expose only an HTTP code and fixed guidance, never provider text or credentials."""
+    hints = {
+        400: "check model support, structured-output schema and request size",
+        401: "check GEMINI_API_KEY",
+        403: "check API permissions and project access",
+        404: "check GEMINI_MODEL availability",
+        429: "rate or quota limit; check Gemini quota/billing and resume after the limit resets",
+    }
+    code = error.code if isinstance(error.code, int) else None
+    return f"Gemini HTTP {code}: {hints.get(code, 'upstream request failed')}"
+
+
 class GeminiDrafter:
     """Use structured Gemini output, a finite deadline, and no hidden SDK retries."""
 
-    def __init__(self, config: EvaluationSettings) -> None:
+    def __init__(self, config: EvaluationSettings, request_interval: float = 0) -> None:
         """Require only Gemini credentials; corpus databases are unnecessary here."""
         if not config.gemini_api_key or not config.gemini_api_key.get_secret_value().strip():
             raise ValueError("GEMINI_API_KEY is required")
         self.model = config.gemini_model
+        self.request_interval = request_interval
+        self.last_request: float | None = None
         self.client = genai.Client(
             api_key=config.gemini_api_key.get_secret_value(),
             http_options=types.HttpOptions(
@@ -46,6 +63,9 @@ class GeminiDrafter:
 
     def __call__(self, prompt: str) -> Draft:
         """Generate a draft without logging prompts, source text, or API keys."""
+        if self.last_request is not None:
+            time.sleep(max(0, self.request_interval - (time.monotonic() - self.last_request)))
+        self.last_request = time.monotonic()
         response = self.client.models.generate_content(
             model=self.model, contents=prompt,
             config={"response_mime_type": "application/json", "response_schema": Draft, "temperature": 0.6},
@@ -165,7 +185,14 @@ def generate_items(
                 failure = None
                 break
             except Exception as error:
-                failure = type(error).__name__
+                if isinstance(error, APIError):
+                    failure = provider_failure(error)
+                    if error.code not in {408, 500, 502, 503, 504}:
+                        raise DraftGenerationError(f"Could not draft {identifier} ({failure}); saved items are preserved") from None
+                    if trial < 2:
+                        time.sleep(2 ** trial)
+                else:
+                    failure = type(error).__name__
         if failure:
             raise DraftGenerationError(f"Could not draft {identifier} after 3 attempts ({failure}); saved items are preserved")
     return saved
@@ -195,9 +222,10 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--limit", type=int, help="Maximum new items to draft in this invocation")
     parser.add_argument("--out-of-scope-only", action="store_true")
+    parser.add_argument("--request-interval", type=float, default=5, help="Minimum seconds between Gemini requests (default 5); does not override provider quota")
     args = parser.parse_args()
-    if args.per_act < 1 or min(args.multi_count, args.out_of_scope_count) < 0 or (args.limit is not None and args.limit < 1):
-        parser.error("Counts must be nonnegative, with positive --per-act and --limit")
+    if args.per_act < 1 or min(args.multi_count, args.out_of_scope_count) < 0 or (args.limit is not None and args.limit < 1) or not 0 <= args.request_interval <= 60:
+        parser.error("Counts must be nonnegative, with positive --per-act/--limit and --request-interval between 0 and 60 seconds")
     drafter = None
     try:
         records = [] if args.out_of_scope_only else list(load_catalog(args.catalog).values())
@@ -206,7 +234,7 @@ def main() -> None:
             bind_manifest(args.output, args.catalog, args.per_act, args.multi_count, args.out_of_scope_count, args.seed)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.touch(exist_ok=True)
-        drafter = GeminiDrafter(EvaluationSettings())
+        drafter = GeminiDrafter(EvaluationSettings(), request_interval=args.request_interval)
         saved = generate_items(args.output, records, drafter, args.per_act, args.multi_count, args.out_of_scope_count, args.seed, args.out_of_scope_only, args.limit)
         print(f"Saved {saved} new drafts; {len(load_gold(args.output))} total. Full default target: 145. Human review is required.")
     except Exception as error:

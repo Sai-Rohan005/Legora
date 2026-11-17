@@ -85,6 +85,20 @@ supporting ID lists and `answerable=false`. They also require human review.
 
 ## 3. Review each item
 
+Generation can resume after an interrupted request without replacing earlier
+drafts or approvals. `python -m eval.generate --limit 10 --request-interval 10`
+adds at most ten new drafts with requests spaced at least ten seconds apart.
+Pacing cannot override a provider's project/daily quota. Provider failures now
+report the HTTP code with fixed guidance rather than just `ClientError`; raw
+provider responses, keys and prompts are never printed. Rate/quota and permanent
+client errors stop immediately; transient server/timeouts use bounded backoff.
+Resolve the reported provider issue before resuming.
+
+Use `python -m eval.review --answerable-only` to review legal questions before
+out-of-scope items. Press `s` to inspect source text, then `a` only after checking
+the question/support. `x` exits without approving. Generation never marks drafts
+reviewed, and evaluations intentionally stop until eligible approvals exist.
+
 ```bash
 python -m eval.review --list
 python -m eval.review

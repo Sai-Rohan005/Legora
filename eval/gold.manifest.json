@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "seed": 42,
+  "per_act": 30,
+  "multi_count": 15,
+  "out_of_scope_count": 10,
+  "catalog_sha256": "8baa5173b17799c6aec274eadf0925a380d00c852f3289347db06ab4e9c925b0"
+}
