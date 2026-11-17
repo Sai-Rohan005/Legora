@@ -3,6 +3,7 @@ from __future__ import annotations
 from google import genai
 from google.genai import types
 from legora.config import get_settings
+from legora.performance import call_external
 
 
 class LegalLLM:
@@ -77,7 +78,7 @@ Answer:
             config["top_k"] = kwargs["top_k"]
         # Add any other supported parameters as needed
 
-        response = self.client.models.generate_content(
+        response = call_external(self.client.models.generate_content,
             model=self.model,
             contents=prompt,
             config=config if config else None  # only pass config if non-empty

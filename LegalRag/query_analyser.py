@@ -4,6 +4,7 @@ from google.genai import types
 from pydantic import BaseModel
 from typing import List, Optional
 from legora.config import EvaluationSettings, Settings, get_settings
+from legora.performance import QueryCache, call_external, normalize_query
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,8 @@ class Analyser:
         if not settings.gemini_api_key or not settings.gemini_api_key.get_secret_value().strip():
             raise ValueError("GEMINI_API_KEY is required for uncached query analysis")
         self.model = settings.gemini_model
+        self.query_cache = QueryCache()
+        self.query_cache.enabled = getattr(settings, "enable_query_cache", False)
         self.client = genai.Client(
             api_key=settings.gemini_api_key.get_secret_value(),
             http_options=types.HttpOptions(timeout=int(settings.external_timeout_seconds * 1000), retry_options=types.HttpRetryOptions(attempts=1))
@@ -76,7 +79,12 @@ class Analyser:
 
     def analyze_query(self, query: str, seed: int | None = None) -> LegalQueryAnalysis:
         """Analyze only the query, with an optional seed for cached evaluation runs."""
-        response = self.client.models.generate_content(
+        normalized = normalize_query(query) if self.query_cache.enabled else query
+        return self.query_cache.get((self.model, self.SYSTEM_PROMPT, normalized, seed), lambda: self._analyze_query(normalized, seed))
+
+    def _analyze_query(self, query: str, seed: int | None) -> LegalQueryAnalysis:
+        """Perform one schema-validated query analysis behind the LRU boundary."""
+        response = call_external(self.client.models.generate_content,
             model=self.model,
             contents=f"""
         {self.SYSTEM_PROMPT}
@@ -92,7 +100,7 @@ class Analyser:
             }
         )
 
-        return response.parsed
+        return LegalQueryAnalysis.model_validate(response.parsed)
     
 
 if __name__=="__main__":

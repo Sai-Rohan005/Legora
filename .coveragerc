@@ -8,6 +8,8 @@ source =
     LegalRag.citation_check
     eval.run_answer_eval
     eval.judge_validation
+    eval.profile_pipeline
+    legora.performance
 # The requested parser scope excludes ingestion clients and runnable examples.
 omit =
     */usage.py

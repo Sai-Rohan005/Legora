@@ -418,3 +418,69 @@ agreement before consistency has run, explicitly marking consistency unmeasured.
 Use `--consistency`, `--output`, `--csv`, and `--samples` to select other paths.
 The current gold file has no reviewed questions, so the checked-in report records
 **not run**; manual agreement and live variance have not been measured.
+
+## Paired pipeline latency and quality benchmark
+
+```bash
+python -m eval.profile_pipeline --count 50 --seed 42 --workers 4
+```
+
+This samples 50 reviewed gold questions without replacement and runs the same
+questions through three switch configurations on one loaded pipeline:
+
+| Mode | Vector I/O | Graph | Analysis/embedding caches |
+|---|---|---|---|
+| before | Serial | Three calls per root | Disabled |
+| after_cold | Concurrent (4 workers by default) | One batched query | Empty at batch start, then filled |
+| after_warm | Concurrent | One batched query | Retained from after_cold |
+
+The script writes `results/latency.md` and measured rows to `results/latency.json`
+only after all three batches complete. The Markdown table reports p50/p95 for
+analysis, embedding, vector search, reranking, Neo4j, generation, judge and total.
+Embedding is subtracted from the enclosing vector stage to report exclusive I/O
+wall time. Timings sum retries per question; startup is measured separately.
+Other work (judgments, citation checks and orchestration) remains in total time.
+This is an in-process switch baseline with the same retry policy, not a saved
+historical deployment. The fixed mode order and shared server/model caches can
+affect differences; warm-cache latency is for repeated questions, not new traffic.
+
+Quality is measured on each batch: macro root Recall@5 over answerable questions,
+using retained reranked sources, and micro citation precision over all citation
+occurrences. Single-provision approved alternates may substitute; all roots of
+multi-provision questions remain required. Undefined denominators cannot pass a
+quality gate. A lower Recall@5 or citation precision is explicitly flagged
+`REGRESSION`; the report does not recommend that configuration as a speedup.
+Model generation can vary, so this sample is not a statistical equivalence proof.
+Freeze corpus/model versions before comparing runs.
+
+Runtime switches are `VECTOR_SEARCH_WORKERS` (1–16, default 1),
+`BATCH_GRAPH_EXPANSION` (default false), and `ENABLE_QUERY_CACHE` (default false).
+Concurrent workers perform Qdrant I/O only; embedding remains sequential to avoid
+concurrent access to the model. Results merge in original query order to preserve
+tie behavior. Any failed search fails the query rather than dropping candidates.
+The graph query uses three UNION branches to retain the legacy result structure
+and traversal directions without a Cartesian product. Live graph equivalence
+still needs verification on the restored corpus.
+
+Caches are bounded, thread-safe, instance-local LRUs (512 entries each). They
+store analysis and query embeddings in memory, keyed by whitespace-normalized
+queries while preserving case and punctuation. Analysis keys also include model,
+prompt and seed; embedding keys include the model. Returned values are copied,
+failed computations are not stored, and process restart clears caches. No disk
+query cache or new secret-bearing artifact is created.
+
+Pipeline Gemini calls, Qdrant searches/scrolls and Neo4j `run_query` calls retry
+transient connectivity, throttling and server errors with tenacity: three total
+attempts, 0.25 then 0.5 seconds exponential backoff. Authentication/validation
+failures do not retry. Existing `EXTERNAL_TIMEOUT_SECONDS` SDK connection/query
+deadlines still apply **per attempt**; retries can therefore take roughly three
+times that budget plus backoff. Generation retries may incur additional provider
+usage if a response is lost. Graph writes and collection mutations are not given
+automatic retries. Health probes retain their own bounded, immediate checks.
+
+`SKIP_JUDGE_HIGH_CONFIDENCE=false` remains mandatory. Setting it true fails before
+loading models: retrieval confidence has not yet been calibrated and no reviewed
+comparison establishes unchanged citation precision/answer quality. The benchmark
+marks judge skipping **not measured** and always runs the judge. The current gold
+file has zero reviewed questions and the database corpus was removed, so the
+checked-in latency report contains no invented p50/p95 or quality results.

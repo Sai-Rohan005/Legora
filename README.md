@@ -149,7 +149,7 @@ The target uses `venv/bin/python` when present, runs pytest-cov with branch
 coverage, and writes `coverage/html/index.html` and `coverage/coverage.json`.
 `python -m pytest` runs the same suite without generating coverage reports.
 Coverage is scoped to the four parser packages, hybrid retrieval, reranking,
-the RAG pipeline, citation verification, and the answer-evaluation runner;
+the RAG pipeline, citation verification, and the evaluation/performance runners;
 ingestion clients and executable examples are excluded.
 There is no artificially imposed coverage threshold.
 
@@ -191,3 +191,9 @@ not whether a cited provision supports the answer's legal claims.
 Run `python -m eval.run_answer_eval` for full-pipeline answer metrics on reviewed
 gold items, including out-of-scope questions. See the evaluation guide for metric
 definitions and report paths.
+
+Run `python -m eval.profile_pipeline` for paired stage p50/p95 and quality
+comparisons over 50 reviewed questions. Performance switches remain opt-in:
+`VECTOR_SEARCH_WORKERS=4`, `BATCH_GRAPH_EXPANSION=true`, and
+`ENABLE_QUERY_CACHE=true`. Judge skipping remains unavailable pending reviewed
+no-quality-loss evidence. See the evaluation guide for cache and retry semantics.

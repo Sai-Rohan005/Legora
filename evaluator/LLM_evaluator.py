@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from google import genai
 from google.genai import types
 from legora.config import EvaluationSettings, Settings, get_settings
+from legora.performance import call_external
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ class LegalLLMEvaluator:
             reference_answer=reference_answer
         )
 
-        response = self.client.models.generate_content(
+        response = call_external(self.client.models.generate_content,
             model=self.model,
             contents=prompt,
             config=types.GenerateContentConfig(

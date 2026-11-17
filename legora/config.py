@@ -40,6 +40,10 @@ class Settings(ClientSettings):
     kanoon_token: SecretStr
 
     use_bm25: bool = False
+    vector_search_workers: int = Field(default=1, ge=1, le=16)
+    batch_graph_expansion: bool = False
+    enable_query_cache: bool = False
+    skip_judge_high_confidence: bool = False
     exact_id_lookup: bool | None = None
     top_k: int = Field(default=30, ge=1)
     rerank_k: int = Field(default=5, ge=1)

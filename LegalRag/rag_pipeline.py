@@ -16,6 +16,8 @@ class RAGPipeline:
         if max_attempts is not None and max_attempts < 1:
             raise ValueError("max_attempts must be at least 1")
         self.settings = get_settings()
+        if self.settings.skip_judge_high_confidence:
+            raise ValueError("Judge skipping is unavailable until reviewed evaluation establishes no quality loss")
         setup_logging(self.settings.log_level)
         self.retriever = LegalRetriever()
         self.llm = LegalLLM()
@@ -136,6 +138,15 @@ class RAGPipeline:
                     + len(retrieval.get("judgments", []))
                 )
                 timings = stage_timings.get() or {}
+                result["stage_latency_ms"] = {
+                    "analysis": timings.get("query_analysis", 0),
+                    "embedding": timings.get("embedding", 0),
+                    "vector_search": max(0, timings.get("vector_search", 0) - timings.get("embedding", 0)),
+                    "rerank": timings.get("reranking", 0),
+                    "neo4j": timings.get("graph_expansion", 0),
+                    "generation": timings.get("generation", 0),
+                    "judge": timings.get("evaluation", 0),
+                }
                 result["latency_ms"] = {
                     "analysis": round(timings.get("query_analysis", 0), 3),
                     "retrieval": round(timings.get("vector_search", 0) + timings.get("judgments", 0) + timings.get("lexical_fusion", 0), 3),

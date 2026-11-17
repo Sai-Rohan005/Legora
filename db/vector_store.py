@@ -15,6 +15,7 @@ from qdrant_client.models import (
     SearchParams
 )
 from legora.config import EvaluationSettings, Settings, get_settings
+from legora.performance import call_external
 
 if TYPE_CHECKING:
     from retrieval.lexical import RetrievalHit
@@ -184,7 +185,7 @@ class QdrantStore:
                 ]
             )
 
-        return self.client.query_points(
+        return call_external(self.client.query_points,
             collection_name=self.collection_name,
             query=query_vector,
             query_filter=q_filter,
@@ -202,7 +203,7 @@ class QdrantStore:
         limit: int = 10
     ):
 
-        return self.client.query_points(
+        return call_external(self.client.query_points,
             collection_name=
                 self.collection_name,
 
@@ -239,7 +240,7 @@ class QdrantStore:
         ]) if chunk_ids is not None else None
         offset = None
         while True:
-            records, offset = self.client.scroll(
+            records, offset = call_external(self.client.scroll,
                 collection_name=self.collection_name, scroll_filter=query_filter,
                 offset=offset, limit=256, with_payload=True, with_vectors=False,
             )

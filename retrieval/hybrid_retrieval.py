@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from typing import Any
 
@@ -21,6 +22,8 @@ class HybridRetriever:
     def __init__(self, use_bm25: bool | None = None, exact_id_lookup: bool | None = None) -> None:
         """Validate graph configuration before loading retrieval models."""
         settings = get_settings()
+        self.vector_search_workers = settings.vector_search_workers
+        self.batch_graph_expansion = settings.batch_graph_expansion
         self.use_bm25 = settings.use_bm25 if use_bm25 is None else use_bm25
         configured_lookup = settings.exact_id_lookup if exact_id_lookup is None else exact_id_lookup
         self.exact_id_lookup = self.use_bm25 if configured_lookup is None else configured_lookup
@@ -29,6 +32,7 @@ class HybridRetriever:
         self.graph = Neo4jStore()
 
         self.embedder = LegalEmbedder()
+        self.embedder.query_cache.enabled = settings.enable_query_cache
         self.reranker = LegalReranker()
         self.analyser=Analyser()
 
@@ -156,7 +160,10 @@ class HybridRetriever:
     # GRAPH EXPANSION
     # =====================================================
 
-    def expand_graph(self, node_ids):
+    def expand_graph(self, node_ids: list[str]) -> dict:
+        """Keep legacy expansion available for measured before/after comparisons."""
+        if getattr(self, "batch_graph_expansion", False):
+            return self.expand_graph_batch(node_ids)
 
         graph_context = {}
 
@@ -170,6 +177,34 @@ class HybridRetriever:
             }
 
         return graph_context
+
+    def expand_graph_batch(self, node_ids: list[str]) -> dict:
+        """Fetch the same three traversal kinds for every root in one Cypher call."""
+        identifiers = list(dict.fromkeys(node_ids))
+        context = {identifier: {"ancestors": [], "children": [], "references": []} for identifier in identifiers}
+        if not identifiers:
+            return context
+        rows = self.graph.run_query("""
+        UNWIND $ids AS id
+        CALL {
+            WITH id
+            MATCH p = (n {id: id})-[:BELONGS_TO*0..10]->(parent)
+            RETURN 'ancestors' AS kind, p AS value
+            UNION ALL
+            WITH id
+            MATCH p = (n {id: id})<-[:BELONGS_TO*0..10]-(child)
+            RETURN 'children' AS kind, p AS value
+            UNION ALL
+            WITH id
+            MATCH (n {id: id})-[:REFERENCES]->(ref)
+            RETURN 'references' AS kind, ref AS value
+        }
+        RETURN id, kind, value
+        """, {"ids": identifiers})
+        for row in rows:
+            key = "ref" if row["kind"] == "references" else "p"
+            context[row["id"]][row["kind"]].append({key: row["value"]})
+        return context
     
 
     def build_retrieval_queries(
@@ -233,7 +268,8 @@ class HybridRetriever:
         k: int = 10
     ):
 
-        query_vector = self.embedder.embed_query(query)
+        with log_stage("embedding", 1):
+            query_vector = self.embedder.embed_query(query)
 
         result = self.vector_db.search_with_filter(
             query_vector=query_vector,
@@ -242,6 +278,22 @@ class HybridRetriever:
         )
 
         return result.points
+
+    def search_queries(self, queries: list[str], document: str | None, k: int) -> list[Any]:
+        """Parallelize I/O only; encode sequentially and merge in input order for stable ties."""
+        workers = getattr(self, "vector_search_workers", 1)
+        if workers == 1 or len(queries) < 2:
+            return [point for query in queries for point in self.vector_search_filtered(query=query, document=document, k=k)]
+        with log_stage("embedding", len(queries)):
+            vectors = [self.embedder.embed_query(query) for query in queries]
+
+        def search(vector: Any) -> list[Any]:
+            """Share the thread-safe Qdrant HTTP client, without touching model or retry state."""
+            return self.vector_db.search_with_filter(query_vector=vector, document=document, limit=k).points
+
+        with ThreadPoolExecutor(max_workers=min(workers, len(vectors))) as executor:
+            batches = list(executor.map(search, vectors))
+        return [point for batch in batches for point in batch]
     
     def get_document_filter(
         self,
@@ -287,16 +339,7 @@ class HybridRetriever:
         logger.debug("Document filter: %s", document_filter)
 
         with log_stage("vector_search") as metrics:
-            for q in queries:
-
-                results = self.vector_search_filtered(
-                    query=q,
-                    document=document_filter,
-                    k=vector_k
-                )
-
-                points.extend(results)
-
+            points = self.search_queries(queries, document_filter, vector_k)
             points=self.dedupe_points(points)
             logger.debug("Retrieved %s unique vector results", len(points))
             metrics.candidate_count = len(points)

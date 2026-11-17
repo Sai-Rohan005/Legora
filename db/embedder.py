@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from legora.performance import QueryCache, normalize_query
 
 from sentence_transformers import (
     SentenceTransformer
@@ -18,6 +19,8 @@ class LegalEmbedder:
     ):
 
         logger.info("Loading embedding model: %s", model_name)
+        self.model_name = model_name
+        self.query_cache = QueryCache()
 
         self.model = (
             SentenceTransformer(
@@ -51,6 +54,11 @@ class LegalEmbedder:
         query: str
     ):
 
+        normalized = normalize_query(query) if self.query_cache.enabled else query
+        return self.query_cache.get((self.model_name, normalized), lambda: self._embed_query(normalized))
+
+    def _embed_query(self, query: str):
+        """Encode one query with the unchanged BGE retrieval instruction."""
         query = (
             "Represent this sentence "
             "for searching relevant "

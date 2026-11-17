@@ -5,6 +5,7 @@ from builtins import str
 
 from neo4j import GraphDatabase, Query
 from legora.config import EvaluationSettings, Settings, get_settings
+from legora.performance import call_external
 
 logger = logging.getLogger(__name__)
 class Neo4jStore:
@@ -64,7 +65,7 @@ class Neo4jStore:
         parameters: dict | None = None
     ):
 
-        result = self.execute(
+        result = call_external(self.execute,
             query,
             parameters
         )

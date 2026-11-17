@@ -217,7 +217,8 @@ def test_multiple_exact_hits_do_not_exceed_candidate_budget() -> None:
 
 def test_startup_indexes_only_when_explicitly_enabled() -> None:
     """Default startup performs no corpus scan; opt-in startup builds a single snapshot."""
-    settings = SimpleNamespace(use_bm25=False, exact_id_lookup=None)
+    settings = SimpleNamespace(use_bm25=False, exact_id_lookup=None,
+                               vector_search_workers=1, batch_graph_expansion=False, enable_query_cache=False)
     with patch("retrieval.hybrid_retrieval.get_settings", return_value=settings), patch(
         "retrieval.hybrid_retrieval.Neo4jStore"
     ), patch("retrieval.hybrid_retrieval.LegalEmbedder"), patch(
