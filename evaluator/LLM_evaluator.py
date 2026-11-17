@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from google import genai
 from google.genai import types
-from legora.config import get_settings
+from legora.config import EvaluationSettings, Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +42,14 @@ class LegalLLMEvaluator:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        settings: Settings | EvaluationSettings | None = None,
     ):
 
-        settings = get_settings()
-        self.api_key = api_key or settings.gemini_api_key.get_secret_value()
+        settings = settings or get_settings()
+        self.api_key = api_key or (settings.gemini_api_key.get_secret_value() if settings.gemini_api_key else None)
+        if not self.api_key or not self.api_key.strip():
+            raise ValueError("GEMINI_API_KEY is required for judge evaluation")
 
         self.client = genai.Client(
             api_key=self.api_key,
@@ -79,6 +82,13 @@ class LegalLLMEvaluator:
             kanoon_context
         )
 
+        return self.evaluate_context(question, answer, context, reference_answer)
+
+    def evaluate_context(
+        self, question: str, answer: str, context: str,
+        reference_answer: str | None = None,
+    ) -> Dict[str, Any]:
+        """Judge a saved, already formatted context with the production prompt at temperature zero."""
         prompt = self._build_prompt(
             question=question,
             answer=answer,

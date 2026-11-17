@@ -365,3 +365,56 @@ The failure stage becomes `CITATION` and uses the existing retry budget. On
 exhaustion, the best attempt retains its own citation report and warnings.
 The `citation_check` stage is logged, and its duration contributes to API
 `latency_ms.judge`.
+
+## Validate the LLM judge against manual labels
+
+```bash
+# Requires at least 50 reviewed questions and a running full pipeline:
+python -m eval.judge_validation export --seed 42
+# Fill only my_label and my_notes in results/judge_validation.csv.
+# my_label must be correct, partially, or incorrect; leave uncertain rows blank.
+python -m eval.judge_validation consistency
+python -m eval.judge_validation report
+```
+
+Export samples 50 reviewed questions without replacement (including reviewed
+out-of-scope items) and runs the full pipeline once per selected question. The
+seed controls question selection, not model generation. `--count` changes the
+sample size. Insufficient reviewed questions stop before model loading; no
+synthetic answers or labels are substituted. Existing export paths are protected;
+use new `--csv` and `--samples` paths for another sample.
+
+The CSV columns are `id, question, answer, context_snippet, my_label, my_notes`.
+Judge scores are hidden from this labeling file. Snippets contain up to 4,000
+context characters with an explicit truncation notice. Inspect the full context
+in `results/judge_validation_samples.jsonl` when needed. That snapshot retains
+the final attempt's original question, expanded judge question, answer, formatted
+judge context, raw overall score, correctness score and model. These files contain
+question/answer/source text; they are local evaluation artifacts ignored by Git.
+
+Agreement uses the saved original judge, with a fixed mapping declared before
+labeling: correctness 0–1 = incorrect, 2 = partially, 3–4 = correct. It reports
+accuracy, unweighted Cohen's kappa, and a confusion matrix (rows human, columns
+judge). Pearson and Spearman correlations compare original **raw** overall_score
+with manual labels encoded incorrect=0, partially=1, correct=2. Citation penalties
+are excluded from that raw score. Blank labels are excluded and counted; unknown
+labels, changed source columns, duplicate IDs and missing rows are rejected.
+Constant inputs or insufficient observations produce undefined correlations;
+kappa is undefined when chance agreement is one.
+
+Consistency makes exactly three fresh judge calls per frozen answer at temperature
+zero, through the production prompt and saved full context. It does not rerun
+retrieval/generation or send human labels to Gemini. This step needs only Gemini
+configuration, not Qdrant/Neo4j/Kanoon credentials. Results are saved in
+`results/judge_consistency.json` and bound to the sample hash. Re-running the
+consistency command replaces those measurements with three new calls per answer.
+The report shows the current judge model, per-answer scores/sample variance
+(ddof=1), mean variance and maximum variance over all sampled answers. Model
+changes may affect comparisons; temperature zero does not guarantee identical
+outputs.
+
+`report` runs offline and writes `results/judge_validation.md`. It can report
+agreement before consistency has run, explicitly marking consistency unmeasured.
+Use `--consistency`, `--output`, `--csv`, and `--samples` to select other paths.
+The current gold file has no reviewed questions, so the checked-in report records
+**not run**; manual agreement and live variance have not been measured.

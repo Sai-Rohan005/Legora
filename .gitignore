@@ -117,3 +117,8 @@ pnpm-lock.yaml
 
 # Cached query analyses contain local query text
 /results/analysis_cache/
+
+# Manual judge-validation answers, context and labels
+/results/judge_validation.csv
+/results/judge_validation_samples.jsonl
+/results/judge_consistency.json
