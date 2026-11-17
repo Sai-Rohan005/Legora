@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     git \
     curl \
+    poppler-utils \
+    tesseract-ocr \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -43,9 +45,9 @@ WORKDIR /app
 # ==========================================================
 COPY requirements.txt .
 
-RUN pip install --upgrade pip
-
-RUN pip install --no-cache-dir -r requirements.txt
+# CPU wheels avoid pulling CUDA runtime libraries into the local deployment.
+RUN pip install --no-cache-dir torch==2.12.0 --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir -r requirements.txt
 
 # ==========================================================
 # Copy Project
@@ -55,9 +57,9 @@ COPY . .
 # ==========================================================
 # Expose Streamlit Port
 # ==========================================================
-EXPOSE 7860
+EXPOSE 8000 7860
 
 # ==========================================================
 # Launch Streamlit
 # ==========================================================
-CMD ["sh", "-c", "python -m uvicorn api.app:app --host 127.0.0.1 --port 8000 & exec streamlit run app.py --server.port=7860 --server.address=0.0.0.0"]
+CMD ["python", "-m", "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]

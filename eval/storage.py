@@ -1,8 +1,8 @@
 """Atomic, validated JSONL storage that preserves human reviews on resume."""
 
-import json
 import os
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TypeVar
 
@@ -43,7 +43,7 @@ def atomic_text(path: Path, text: str) -> None:
             temporary.unlink(missing_ok=True)
 
 
-def write_jsonl(path: Path, records: list[BaseModel]) -> None:
+def write_jsonl(path: Path, records: Sequence[BaseModel]) -> None:
     """Write actual records, with no placeholder or silently invalid rows."""
     atomic_text(path, "".join(record.model_dump_json() + "\n" for record in records))
 

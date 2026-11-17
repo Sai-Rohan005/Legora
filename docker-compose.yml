@@ -1,0 +1,103 @@
+services:
+  api:
+    image: legora:local
+    build: .
+    env_file: .env
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      NEO4J_URI: bolt://neo4j:7687
+    command: [python, -m, uvicorn, api.app:app, --host, 0.0.0.0, --port, "8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - model_cache:/app/.cache/huggingface
+      - ./data/statutes:/data/statutes:ro
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=35).close()"]
+      interval: 30s
+      timeout: 40s
+      retries: 5
+      start_period: 600s
+    restart: unless-stopped
+
+  ui:
+    image: legora:local
+    build: .
+    # Only UI settings are passed; backend keys stay in the API container.
+    environment:
+      API_BASE_URL: http://api:8000
+      API_TIMEOUT_SECONDS: ${API_TIMEOUT_SECONDS:-180}
+    command: [python, -m, streamlit, run, app.py, --server.address=0.0.0.0, --server.port=7860]
+    ports:
+      - "127.0.0.1:7860:7860"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/_stcore/health', timeout=5).close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.14.1
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+    # An empty API-key setting would enable auth with an empty key upstream.
+    command:
+      - bash
+      - -ec
+      - 'if [ -z "$$QDRANT__SERVICE__API_KEY" ]; then unset QDRANT__SERVICE__API_KEY; fi; exec ./entrypoint.sh'
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      # The upstream image has bash; curl/wget are not assumed.
+      test:
+        - CMD-SHELL
+        - >-
+          bash -ec 'exec 3<>/dev/tcp/127.0.0.1/6333;
+          printf "GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3;
+          read -r response <&3; [[ "$$response" == *" 200 "* ]]'
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5.26.0-community
+    environment:
+      NEO4J_AUTH: ${NEO4J_USERNAME:?Set NEO4J_USERNAME in .env}/${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env}
+      NEO4J_USERNAME: ${NEO4J_USERNAME:?Set NEO4J_USERNAME in .env}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env}
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: [CMD-SHELL, 'cypher-shell -a bolt://127.0.0.1:7687 -u "$$NEO4J_USERNAME" -p "$$NEO4J_PASSWORD" "RETURN 1" > /dev/null']
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:
+  neo4j_data:
+  neo4j_logs:
+  model_cache:

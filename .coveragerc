@@ -10,10 +10,13 @@ source =
     eval.judge_validation
     eval.profile_pipeline
     legora.performance
+    scripts.ingest
+    scripts.corpus_stats
 # The requested parser scope excludes ingestion clients and runnable examples.
 omit =
     */usage.py
-    */ingest.py
+    db/ingest.py
+    db/parsers/*/ingest.py
     */search.py
     */qdrant_store.py
     */embedder.py

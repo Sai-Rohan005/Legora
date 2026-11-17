@@ -6,6 +6,7 @@ import json
 import random
 from collections.abc import Callable
 from pathlib import Path
+from typing import Literal
 
 from google import genai
 from google.genai import types
@@ -96,7 +97,7 @@ def checked_item(identifier: str, draft: Draft, candidates: list[Provision], mul
         roots = {provision_root(value) for value in draft.expected_chunk_ids}
         if len(roots) < 2:
             raise ValueError("A multi-provision question requires distinct supporting provisions")
-        act = "MULTI"
+        act: Literal["BNS", "BNSS", "BSA", "Constitution", "MULTI"] = "MULTI"
     else:
         if draft.expected_chunk_ids != [candidates[0].chunk_id]:
             raise ValueError("Single-provision support must match the sampled provision")

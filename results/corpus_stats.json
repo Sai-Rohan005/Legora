@@ -1,0 +1,52 @@
+{
+  "measured_at_utc": "2026-11-17T03:06:41.993006+00:00",
+  "collection": "legal_rag",
+  "status": "unavailable",
+  "dependencies": {
+    "qdrant": {
+      "status": "unavailable",
+      "error_type": "ResponseHandlingException"
+    },
+    "neo4j": {
+      "status": "unavailable",
+      "error_type": "ValueError"
+    }
+  },
+  "acts": [
+    {
+      "act": "BNS",
+      "chunks": null,
+      "graph_nodes": null,
+      "graph_edges": null
+    },
+    {
+      "act": "BNSS",
+      "chunks": null,
+      "graph_nodes": null,
+      "graph_edges": null
+    },
+    {
+      "act": "BSA",
+      "chunks": null,
+      "graph_nodes": null,
+      "graph_edges": null
+    },
+    {
+      "act": "Constitution",
+      "chunks": null,
+      "graph_nodes": null,
+      "graph_edges": null
+    },
+    {
+      "act": "Unmapped",
+      "chunks": null,
+      "graph_nodes": null,
+      "graph_edges": null
+    }
+  ],
+  "totals": {
+    "chunks": null,
+    "graph_nodes": null,
+    "graph_edges": null
+  }
+}

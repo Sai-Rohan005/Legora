@@ -41,7 +41,7 @@ class BM25Retriever:
 
     def __init__(self, hits: Iterable[RetrievalHit]) -> None:
         """Index text plus stored IDs, excluding empty or unidentified chunks."""
-        unique = {}
+        unique: dict[str, RetrievalHit] = {}
         for hit in hits:
             identifier = hit.payload.get("chunk_id")
             text = hit.payload.get("enriched_text") or hit.payload.get("text")
@@ -75,7 +75,7 @@ def reciprocal_rank_fusion(rankings: Sequence[Sequence[Any]], k: int = 60, limit
     if k < 1:
         raise ValueError("RRF k must be positive")
     scores: dict[str, float] = {}
-    sources = {}
+    sources: dict[str, Any] = {}
     for ranking in rankings:
         seen = set()
         for rank, point in enumerate(ranking, 1):
@@ -108,6 +108,12 @@ def act_code(text: str) -> str:
     return "CONST"
 
 
+def _normalized_clause(match: re.Match[str]) -> str:
+    """Preserve numeric clause suffix case while normalizing alphabetic labels."""
+    value = match.group(1)
+    return "(" + (value.upper() if value[0].isdigit() else value.lower()) + ")"
+
+
 def explicit_provisions(query: str) -> list[list[str]]:
     """Parse qualified section/article references; never guess an act from a bare number."""
     acts = list(re.finditer(rf"\b({ACT_PATTERN})\b", query, re.I))
@@ -115,7 +121,7 @@ def explicit_provisions(query: str) -> list[list[str]]:
     unique_acts = {act_code(match[1]) for match in acts}
     qualified = []
     for reference in references:
-        number = reference[1]
+        number: str = reference[1]
         code = None
         # In multi-act queries, require an adjacent act with only linking words.
         for match in acts:
@@ -128,7 +134,7 @@ def explicit_provisions(query: str) -> list[list[str]]:
         if code is None:
             continue
         base = number.split("(", 1)[0].upper()
-        suffix = re.sub(r"\(([^)]+)\)", lambda match: "(" + (match[1].upper() if match[1][0].isdigit() else match[1].lower()) + ")", number[len(base):])
+        suffix = re.sub(r"\(([^)]+)\)", _normalized_clause, number[len(base):])
         aliases = [f"{code}-{base}{suffix}"]
         if code == "CONST":
             parts = re.findall(r"\(([^)]+)\)", suffix)

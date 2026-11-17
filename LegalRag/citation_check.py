@@ -124,7 +124,7 @@ def extract_citations(answer: str, known_ids: Collection[str] = ()) -> list[Cita
             elif len(codes) == 1:
                 code = next(iter(codes))
         number_matches = list(re.finditer(NUMBER, reference["numbers"]))
-        numbers = []
+        numbers: list[tuple[int, str]] = []
         for index, match in enumerate(number_matches):
             number = normalized_number(match[0])
             if index:

@@ -163,7 +163,7 @@ def run_configuration(
         points.extend(retriever.vector_search_filtered(query, document=document, k=candidates))
     # Same merged budget for every configuration, and an explicit tie breaker.
     points = sorted(retriever.dedupe_points(points), key=lambda point: (-float(point.score), point.payload["chunk_id"]))[:candidates]
-    exact = []
+    exact: list[Any] = []
     if configuration.bm25 or configuration.exact_id_lookup:
         points, exact = retriever.fuse_candidates(
             question, points, document, candidates, configuration.bm25, configuration.exact_id_lookup,
@@ -208,7 +208,7 @@ def ranking_metrics(item: GoldItem, ranked_ids: list[str], match: str, graph_ids
                 positions.append(rank)
                 break
     count = len(groups)
-    values = {f"recall_at_{k}": sum(rank <= k for rank in positions) / count for k in (1, 5, 10)}
+    values: dict[str, float | None] = {f"recall_at_{k}": sum(rank <= k for rank in positions) / count for k in (1, 5, 10)}
     values["mrr"] = 1 / min(positions) if positions else 0.0
     ideal = sum(1 / math.log2(rank + 1) for rank in range(1, min(count, 10) + 1))
     values["ndcg_at_10"] = sum(1 / math.log2(rank + 1) for rank in positions if rank <= 10) / ideal

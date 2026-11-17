@@ -41,7 +41,7 @@ def setup_logging(level: str = "INFO") -> None:
     if not any(getattr(handler, "_legora_json", False) for handler in root.handlers):
         handler = logging.StreamHandler()
         handler.setFormatter(JsonFormatter())
-        handler._legora_json = True
+        setattr(handler, "_legora_json", True)
         root.handlers[:] = [handler]
     root.setLevel(level)
     # HTTP request URLs and SDK diagnostics can contain credentials.

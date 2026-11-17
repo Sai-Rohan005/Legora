@@ -10,6 +10,7 @@ import json
 import math
 import random
 import statistics
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -125,7 +126,7 @@ def load_labels(path: Path, samples: list[Sample]) -> dict[str, str]:
     return labels
 
 
-def correlation(left: list[float], right: list[float]) -> float | None:
+def correlation(left: Sequence[float], right: Sequence[float]) -> float | None:
     """Pearson correlation, undefined for constant inputs or fewer than two pairs."""
     if len(left) != len(right):
         raise ValueError("Correlation requires paired observations")
@@ -137,7 +138,7 @@ def correlation(left: list[float], right: list[float]) -> float | None:
     return sum(x * y for x, y in zip(centered_x, centered_y)) / denominator if denominator else None
 
 
-def ranks(values: list[float]) -> list[float]:
+def ranks(values: Sequence[float]) -> list[float]:
     """Assign average one-based ranks to ties for Spearman correlation."""
     return [1 + sum(other < value for other in values) + (values.count(value) - 1) / 2 for value in values]
 
@@ -249,23 +250,24 @@ def main() -> None:
     parser.add_argument("--count", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
-    resource = None
+    pipeline = None
+    judge = None
     try:
         if args.command == "export":
             gold = load_gold(args.gold)
             sample_questions(gold, args.count, args.seed)  # Gate before loading models/clients.
             if args.csv.exists() or args.samples.exists():
                 raise ValueError("Export paths already exist; use new paths")
-            resource = load_pipeline()
-            export_samples(gold, resource, args.count, args.seed, args.csv, args.samples)
+            pipeline = load_pipeline()
+            export_samples(gold, pipeline, args.count, args.seed, args.csv, args.samples)
             print(f"Exported {args.count} answers; fill my_label and my_notes in {args.csv}")
         elif args.command == "consistency":
             from evaluator.LLM_evaluator import LegalLLMEvaluator
             from legora.config import EvaluationSettings
 
             samples = load_samples(args.samples)
-            resource = LegalLLMEvaluator(settings=EvaluationSettings())
-            result = run_consistency(samples, resource)
+            judge = LegalLLMEvaluator(settings=EvaluationSettings())
+            result = run_consistency(samples, judge)
             atomic_text(args.consistency, json.dumps(result, indent=2) + "\n")
             print(f"Saved three-run consistency measurements to {args.consistency}")
         else:
@@ -277,14 +279,13 @@ def main() -> None:
         if not args.output.exists():
             atomic_text(args.output, "# Judge validation — not run\n\nNo completed manual agreement/consistency report. Export real pipeline answers and fill manual labels before reporting.\n")
         # Safe validation errors are useful, but upstream failures may contain secrets/prompts.
-        message = str(error) if type(error) is ValueError and args.command == "export" and resource is None else type(error).__name__
+        message = str(error) if type(error) is ValueError and args.command == "export" and pipeline is None else type(error).__name__
         parser.exit(1, f"Judge validation failed: {message}. No incomplete run was scored.\n")
     finally:
-        if resource is not None:
-            if args.command == "export":
-                resource.close()
-            else:
-                resource.client.close()
+        if pipeline is not None:
+            pipeline.close()
+        if judge is not None:
+            judge.client.close()
 
 
 if __name__ == "__main__":

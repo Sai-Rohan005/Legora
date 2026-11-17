@@ -93,9 +93,10 @@ def main() -> None:
             print(f"{sum(item.reviewed for item in items)}/{len(items)} reviewed")
             return
         if args.id:
-            item = next((entry for entry in items if entry.id == args.id), None)
-            if item is None:
+            selected = next((entry for entry in items if entry.id == args.id), None)
+            if selected is None:
                 raise ValueError("Unknown item ID")
+            item = selected
             changes = {field: value for field, value in {
                 "expected_chunk_ids": args.expected, "acceptable_alternates": args.alternates,
                 "question": args.question, "notes": args.notes, "intent": args.intent,

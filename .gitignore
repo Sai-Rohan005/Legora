@@ -122,3 +122,9 @@ pnpm-lock.yaml
 /results/judge_validation.csv
 /results/judge_validation_samples.jsonl
 /results/judge_consistency.json
+
+# User-supplied statute sources and OCR artifacts
+/data/statutes/*
+!/data/statutes/README.md
+.mypy_cache/
+.ruff_cache/

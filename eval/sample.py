@@ -6,6 +6,7 @@ import random
 import re
 from collections.abc import Iterable, Iterator
 from pathlib import Path
+from math import ceil
 
 from qdrant_client import QdrantClient
 
@@ -107,7 +108,7 @@ def main() -> None:
             if not config.qdrant_url:
                 raise ValueError("QDRANT_URL is required, or supply --chunks")
             key = config.qdrant_api_key.get_secret_value() if config.qdrant_api_key else None
-            client = QdrantClient(url=config.qdrant_url, api_key=key or None, timeout=config.external_timeout_seconds, check_compatibility=False)
+            client = QdrantClient(url=config.qdrant_url, api_key=key or None, timeout=ceil(config.external_timeout_seconds), check_compatibility=False)
             try:
                 records = stored_provisions(scroll_payloads(client, args.collection or ["legal_rag"]))
             finally:

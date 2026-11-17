@@ -4,7 +4,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from copy import deepcopy
 from threading import RLock
-from typing import ParamSpec, TypeVar
+from typing import ParamSpec, TypeVar, cast
 
 import httpx
 from tenacity import Retrying, retry_if_exception, stop_after_attempt, wait_exponential
@@ -39,7 +39,7 @@ class QueryCache:
                 if len(self.values) > self.capacity:
                     self.values.popitem(last=False)
             self.values.move_to_end(key)
-            return deepcopy(self.values[key])
+            return cast(T, deepcopy(self.values[key]))
 
     def clear(self) -> None:
         """Remove values before a cold benchmark or a model/prompt change."""
