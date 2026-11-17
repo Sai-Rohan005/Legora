@@ -149,7 +149,8 @@ The target uses `venv/bin/python` when present, runs pytest-cov with branch
 coverage, and writes `coverage/html/index.html` and `coverage/coverage.json`.
 `python -m pytest` runs the same suite without generating coverage reports.
 Coverage is scoped to the four parser packages, hybrid retrieval, reranking,
-and the RAG pipeline; ingestion clients and executable examples are excluded.
+the RAG pipeline, citation verification, and the answer-evaluation runner;
+ingestion clients and executable examples are excluded.
 There is no artificially imposed coverage threshold.
 
 The suite blocks socket connections and DNS lookups and forces Hugging Face
@@ -177,3 +178,16 @@ this independently with `EXACT_ID_LOOKUP=true/false` or the constructor's
 `exact_id_lookup` argument. Without an explicit act, no statute is guessed.
 Both stages remain off under the default configuration pending reviewed
 Recall@5/MRR evidence; configuration G in the ablation runner evaluates them.
+
+Generated answers also pass through `LegalRag/citation_check.py`. It normalizes
+statutory section/article mentions against retained passages and graph nodes.
+Unsupported citations lower the judge score and trigger the existing `CITATION`
+retry path within `MAX_ATTEMPTS`. The API adds `unsupported_citations`,
+`citation_precision`, and `citation_checks` with per-mention support statuses;
+Streamlit displays a warning when unsupported citations remain after retries.
+Precision is null for answers without citations. This verifies source presence,
+not whether a cited provision supports the answer's legal claims.
+
+Run `python -m eval.run_answer_eval` for full-pipeline answer metrics on reviewed
+gold items, including out-of-scope questions. See the evaluation guide for metric
+definitions and report paths.

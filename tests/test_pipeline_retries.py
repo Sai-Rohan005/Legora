@@ -142,3 +142,61 @@ def test_query_expansion_rules(query: str, expected: str, pipeline_factory: Call
     """Existing rule/section queries retain their specificity during expansion."""
     pipeline = pipeline_factory([evaluation(90)])
     assert pipeline._expand_query(query) == expected
+
+
+def test_unsupported_citation_overrides_high_judge_score_and_retries(pipeline_factory: Callable[..., RAGPipeline]) -> None:
+    """A nominally passing judge cannot approve unsupported statutory citations."""
+    pipeline = pipeline_factory([evaluation(100), evaluation(95)], budget=2)
+    pipeline.llm.generate.side_effect = ["Section 999 BNS applies.", "Section 303 BNS applies."]
+    context = {"final_context": "BNS-303", "statutory_results": [{"chunk_id": "BNS-303"}], "graph_context": {}, "judgments": []}
+    pipeline.retriever.retrieve.side_effect = [context, context]
+    result = pipeline.search("theft")
+    assert result["status"] == "PASS" and result["attempts"] == 2
+    assert result["citation_check"]["unsupported_citations"] == []
+    assert result["citation_check"]["citation_precision"] == 1
+    assert pipeline.llm.generate.call_args_list[1].kwargs["temperature"] == pytest.approx(0.5)
+    assert pipeline.retriever.retrieve.call_args_list[1].args == ("theft",)
+
+
+def test_exhausted_unsupported_answer_keeps_matching_flags_and_penalty(pipeline_factory: Callable[..., RAGPipeline]) -> None:
+    """The chosen best failed attempt carries its own citation report and reduced score."""
+    pipeline = pipeline_factory([evaluation(100)], budget=1)
+    pipeline.llm.generate.side_effect = ["Section 303 BNS and section 999 BNS."]
+    pipeline.retriever.retrieve.side_effect = [{"final_context": "BNS-303", "statutory_results": [{"chunk_id": "BNS-303"}], "graph_context": {}, "judgments": []}]
+    result = pipeline.search("theft")
+    assert result["status"] == "FAIL"
+    assert result["evaluation"]["overall_score"] == 50
+    assert result["evaluation"]["llm_overall_score"] == 100
+    assert result["evaluation"]["failure_stage"] == "CITATION"
+    assert result["citation_check"]["unsupported_citations"] == ["BNS-999"]
+
+
+def test_one_unsupported_citation_cannot_pass_even_with_high_precision(pipeline_factory: Callable[..., RAGPipeline]) -> None:
+    """The score cap enforces retry even when most citation occurrences are supported."""
+    pipeline = pipeline_factory([evaluation(100)], budget=1)
+    pipeline.llm.generate.side_effect = ["Section 303 BNS. " * 10 + "Section 999 BNS."]
+    pipeline.retriever.retrieve.side_effect = [{"final_context": "BNS-303"}]
+    result = pipeline.search("theft")
+    assert result["status"] == "FAIL" and result["evaluation"]["overall_score"] == 79
+    assert result["citation_check"]["citation_precision"] == pytest.approx(10 / 11)
+
+
+def test_best_failed_attempt_retains_its_own_citation_flags(pipeline_factory: Callable[..., RAGPipeline]) -> None:
+    """The verifier report must describe the selected answer, not the last retry."""
+    pipeline = pipeline_factory([evaluation(100), evaluation(90)], budget=2)
+    pipeline.llm.generate.side_effect = ["Section 303 BNS and section 999 BNS.", "Section 888 BNS."]
+    pipeline.retriever.retrieve.side_effect = [{"final_context": "BNS-303"}] * 2
+    result = pipeline.search("theft")
+    assert result["answer"] == "Section 303 BNS and section 999 BNS."
+    assert result["citation_check"]["unsupported_citations"] == ["BNS-999"]
+    assert result["evaluation"]["overall_score"] == 50
+    assert result["attempts"] == 2
+
+
+def test_unsupported_citations_cannot_pass_at_zero_threshold(pipeline_factory: Callable[..., RAGPipeline]) -> None:
+    """The explicit decision guard is required even when a score cap cannot go below zero."""
+    pipeline = pipeline_factory([evaluation(100)], budget=1)
+    pipeline.settings = pipeline.settings.model_copy(update={"pass_threshold": 0})
+    pipeline.llm.generate.side_effect = ["Section 999 BNS."]
+    result = pipeline.search("theft")
+    assert result["status"] == "FAIL"

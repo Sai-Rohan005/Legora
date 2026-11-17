@@ -5,6 +5,8 @@ source =
     retrieval.hybrid_retrieval
     retrieval.cross_encoder
     LegalRag.rag_pipeline
+    LegalRag.citation_check
+    eval.run_answer_eval
 # The requested parser scope excludes ingestion clients and runnable examples.
 omit =
     */usage.py

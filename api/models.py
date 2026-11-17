@@ -3,6 +3,7 @@
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from LegalRag.citation_check import CheckedCitation
 
 
 class QueryRequest(BaseModel):
@@ -54,6 +55,9 @@ class QueryResponse(BaseModel):
     """A JSON-safe answer with provenance and diagnostics."""
 
     answer: str
+    unsupported_citations: list[str] = Field(default_factory=list)
+    citation_precision: float | None = Field(default=None, ge=0, le=1)
+    citation_checks: list[CheckedCitation] = Field(default_factory=list)
     citations: list[Citation]
     retrieval_debug: RetrievalDebug
     evaluation: Evaluation

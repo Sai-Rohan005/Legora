@@ -60,7 +60,7 @@ def test_query_contract_and_single_startup(settings: Settings, pipeline: Mock) -
         "Explain theft.", top_k=None, include_graph=True, include_judgments=True,
     )
     body = response.json()
-    assert set(body) == {"answer", "citations", "retrieval_debug", "evaluation", "attempts", "latency_ms"}
+    assert set(body) == {"answer", "citations", "retrieval_debug", "evaluation", "attempts", "latency_ms", "unsupported_citations", "citation_precision", "citation_checks"}
     assert body["retrieval_debug"] == {"vector_hits": 2, "reranked": 1, "node_ids": ["BNS-303"]}
     assert body["evaluation"] == {"score": 90, "stage": None}
     assert body["attempts"] == 2
@@ -204,3 +204,16 @@ def test_streamlit_chat_calls_api(
         post.assert_called_once_with(
             "http://127.0.0.1:8000/query", json={"query": "Explain theft."}, timeout=180,
         )
+
+
+def test_api_flags_unsupported_statutory_citations(settings: Settings, pipeline: Mock) -> None:
+    """Expose precise unsupported IDs and per-citation status without raw prompts."""
+    pipeline.search.return_value["answer"] = "Section 303 BNS and BNSS 999(2)."
+    pipeline.search.return_value["evaluation"] = {"overall_score": 45, "failure_stage": "CITATION"}
+    with TestClient(create_app(lambda: pipeline, settings)) as client:
+        response = client.post("/query", json={"query": "question"})
+    assert response.status_code == 200
+    assert response.json()["unsupported_citations"] == ["BNSS-999(2)"]
+    assert response.json()["citation_precision"] == 0.5
+    assert [citation["status"] for citation in response.json()["citation_checks"]] == ["citation_supported", "citation_unsupported"]
+    assert response.json()["evaluation"]["stage"] == "CITATION"

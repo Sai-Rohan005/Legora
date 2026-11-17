@@ -134,6 +134,8 @@ if query:
             )
 
             st.markdown(answer)
+            if result.get("unsupported_citations"):
+                st.warning("Statutory citations not matched to retrieved context: " + ", ".join(result["unsupported_citations"]))
 
             with st.expander("📚 Retrieved Sources"):
                 citations = result["citations"]

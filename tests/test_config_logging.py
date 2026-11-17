@@ -118,7 +118,7 @@ class LoggingTests(test_audit.ConfiguredTestCase):
         self.assertEqual(len({record["request_id"] for record in records}), 1)
         self.assertTrue(records[0]["request_id"])
         self.assertEqual([record["attempt"] for record in records if record["stage"] == "generation"], [1, 2])
-        self.assertEqual({record["stage"] for record in records}, {"retrieval", "generation", "evaluation", "query"})
+        self.assertEqual({record["stage"] for record in records}, {"retrieval", "generation", "citation_check", "evaluation", "query"})
         for record in records:
             self.assertEqual(record["candidate_count"], 2)
             self.assertGreaterEqual(record["latency_ms"], 0)
@@ -167,7 +167,7 @@ class LoggingTests(test_audit.ConfiguredTestCase):
         self.assertEqual(counts, {
             "query_analysis": None, "vector_search": 2, "reranking": 1,
             "graph_expansion": 1, "judgments": 1, "retrieval": 2,
-            "generation": 2, "evaluation": 2, "query": 2,
+            "generation": 2, "citation_check": 2, "evaluation": 2, "query": 2,
         })
 
     def test_query_failure_restores_context(self) -> None:

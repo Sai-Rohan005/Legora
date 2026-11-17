@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from api.models import (
     Citation, DependencyStatus, HealthResponse, QueryRequest, QueryResponse,
 )
+from LegalRag.citation_check import CitationReport, check_citations
 from legora.config import Settings, get_settings
 from legora.logging import setup_logging
 
@@ -65,8 +66,12 @@ def query_response(result: dict) -> QueryResponse:
                 url=f"https://indiankanoon.org/doc/{identifier}/" if str(identifier).isdigit() else None,
             ))
     evaluation = result["evaluation"]
+    citation_check = CitationReport.model_validate(result["citation_check"]) if "citation_check" in result else check_citations(result["answer"], retrieval)
     return QueryResponse(
         answer=result["answer"], citations=citations,
+        unsupported_citations=citation_check.unsupported_citations,
+        citation_precision=citation_check.citation_precision,
+        citation_checks=citation_check.citations,
         retrieval_debug={
             "vector_hits": len(retrieval["vector_results"]),
             "reranked": len(retrieval["statutory_results"]),

@@ -314,3 +314,54 @@ and exact nDCG@10, then configuration and item ID. The same question can appear
 under multiple failing configurations. Full Recall@10 with an imperfect nDCG@10
 ranking is also included among failures. No incomplete query run is summarized as
 a completed benchmark.
+
+## Full-pipeline answer evaluation
+
+```bash
+python -m eval.run_answer_eval
+python -m eval.run_answer_eval --gold eval/gold.jsonl --output-dir results
+```
+
+This runner loads one pipeline, runs all reviewed questions (including
+out-of-scope items), and closes its clients after the batch. Unreviewed items
+are excluded. An empty reviewed set stops before loading clients or weights;
+failed batches produce no completed metrics. The current dataset has no reviewed
+items, so `results/answer_eval.md` records **not run** without numerical scores.
+
+Completed runs write `answer_eval.json`, `answer_eval.md`, and
+`answer_eval_details.jsonl`. Details retain answers, expected IDs, citation checks,
+attempts, evaluation scores, and refusal decisions for inspection.
+
+The deterministic verifier recognizes section/article labels, common abbreviations,
+act-first forms such as `BNSS 45(2)`, canonical chunk IDs, and legacy Constitution
+IDs. It expands bounded numeric ranges. Unknown acts, ambiguous bare sections,
+and invalid or excessively large ranges remain unsupported. A bare article maps
+to the Constitution; a bare section may use the unique matching retrieved act.
+Root citations can match descendant chunks. Specific subsections require an
+appropriate chunk or subsection markers inside the retrieved parent passage.
+Requested graph IDs, queries and discarded vector candidates are not evidence.
+These checks establish citation presence, not legal-claim entailment.
+
+Metrics use these denominators:
+
+- Citation precision: supported citation occurrences / all citation occurrences.
+  Repeated mentions count separately. Macro precision averages citation-bearing
+  answers; answers without citations are counted separately, with null precision.
+- Unsupported-citation rate: unsupported occurrences / all occurrences.
+  Unsupported-answer rate is the fraction of answers with any unsupported citation.
+- Answer-contains-expected-provision rate: answerable questions whose answers
+  mention all expected root provisions / answerable questions. A reviewed alternate
+  may substitute for a single expected ID. The supported counterpart additionally
+  requires those mentions to pass the context check.
+- Out-of-scope refusal rate: recognized refusals / reviewed out-of-scope questions.
+  Canonical abstention and explicit inability/out-of-scope wording count; low
+  confidence alone does not. Inspect the saved decisions for wording missed by
+  this deterministic heuristic. Absent categories have null metrics.
+
+In production, any unsupported citation prevents PASS. Its adjusted score is
+the raw judge score multiplied by citation precision, capped at
+`max(0, PASS_THRESHOLD - 1)`; the original score remains `llm_overall_score`.
+The failure stage becomes `CITATION` and uses the existing retry budget. On
+exhaustion, the best attempt retains its own citation report and warnings.
+The `citation_check` stage is logged, and its duration contributes to API
+`latency_ms.judge`.

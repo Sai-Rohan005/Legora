@@ -1,3 +1,4 @@
+from LegalRag.citation_check import check_citations
 from retrieval.usage import LegalRetriever
 from LLM.llm import LegalLLM
 from evaluator.LLM_evaluator import LegalLLMEvaluator
@@ -61,6 +62,8 @@ class RAGPipeline:
     # Decision
     # ------------------------------------------------------------------
     def decide(self, evaluation: dict):
+        if evaluation.get("unsupported_citations"):
+            return {"status": "FAIL", "action": "RETRY"}
         score = evaluation.get("overall_score", 0)
         if score >= self.settings.pass_threshold:
             return {"status": "PASS", "action": "RETURN_ANSWER"}
@@ -139,7 +142,7 @@ class RAGPipeline:
                     "rerank": round(timings.get("reranking", 0), 3),
                     "graph": round(timings.get("graph_expansion", 0), 3),
                     "generation": round(timings.get("generation", 0), 3),
-                    "judge": round(timings.get("evaluation", 0), 3),
+                    "judge": round(timings.get("evaluation", 0) + timings.get("citation_check", 0), 3),
                 }
                 return result
 
@@ -176,9 +179,23 @@ class RAGPipeline:
             with log_stage("generation", metrics.candidate_count):
                 answer = self.get_llm_result(context)
 
+            with log_stage("citation_check", metrics.candidate_count):
+                citation_report = check_citations(answer, retrieval_result)
+
             # 3. Evaluate
             with log_stage("evaluation", metrics.candidate_count):
-                evaluation = self.evaluate(answer, retrieval_result)
+                evaluation = dict(self.evaluate(answer, retrieval_result))
+                evaluation["citation_precision"] = citation_report.citation_precision
+                evaluation["unsupported_citations"] = citation_report.unsupported_citations
+                if citation_report.unsupported_citations:
+                    raw_score = evaluation.get("overall_score", 0)
+                    evaluation["llm_overall_score"] = raw_score
+                    evaluation["overall_score"] = min(
+                        raw_score * (citation_report.citation_precision or 0.0),
+                        max(0, self.settings.pass_threshold - 1),
+                    )
+                    evaluation["failure_stage"] = "CITATION"
+                    evaluation["recommended_action"] = "RETRY"
 
             # 4. Decide
             decision = self.decide(evaluation)
@@ -190,6 +207,7 @@ class RAGPipeline:
                     "answer": answer,
                     "retrieval": retrieval_result,
                     "evaluation": evaluation,
+                    "citation_check": citation_report.model_dump(),
                 }
 
             if decision["status"] == "PASS":
@@ -199,6 +217,7 @@ class RAGPipeline:
                     "answer": answer,
                     "retrieval": retrieval_result,
                     "evaluation": evaluation,
+                    "citation_check": citation_report.model_dump(),
                     "status": "PASS",
                     "attempts": self.attempt
                 }
